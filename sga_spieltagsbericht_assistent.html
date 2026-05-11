@@ -532,10 +532,17 @@
       <main class="panel">
         <section class="section active" data-section="1">
           <h2>1. Art des Berichts wählen</h2>
-          <p>Wähle aus, ob es um Erwachsenen- oder Jugendmannschaften geht. Bei Jugendberichten werden später automatisch nur Vornamen im Prompt gefordert.</p>
+          <p>Wähle aus, ob es um Erwachsenen- oder Jugendmannschaften geht und für welchen Kanal der Text erstellt werden soll.</p>
+          <h3>Mannschaftsbereich</h3>
           <div class="choices">
             <button class="choice active" data-mode="Erwachsene"><strong>Erwachsene</strong><span>Spielerinnen und Spieler werden mit Vorname Nachname genannt.</span></button>
             <button class="choice" data-mode="Jugend"><strong>Jugend</strong><span>Spielerinnen und Spieler werden ausschließlich mit Vornamen genannt.</span></button>
+          </div>
+          <h3 style="margin-top:24px">Ausgabeformat</h3>
+          <div class="choices">
+            <button class="choice active" data-output-format="Printmedien"><strong>Printmedien</strong><span>Zeitungsartikel für die Arheilger Post.</span></button>
+            <button class="choice" data-output-format="SGA App"><strong>SGA App</strong><span>Kürzere News für die Vereins-App.</span></button>
+            <button class="choice" data-output-format="WhatsApp"><strong>WhatsApp</strong><span>Lockerer Post mit Emojis für Gruppen.</span></button>
           </div>
           <div class="infobox"><strong>✓ Grundprinzip</strong><p>Die Anwendung ist der digitale Pressesprecher: Rohdaten aus nuLiga sammeln, Zusatzinfos ergänzen, Prompt kopieren und in ChatGPT oder ein anderes LLM einfügen.</p></div>
         </section>
@@ -642,6 +649,7 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
       passwordRequired: false,
       openaiEnabled: false,
       mode: "Erwachsene",
+      outputFormat: "Printmedien",
       sourceUrl: defaultSourceUrl,
       reportFrom: "",
       reportTo: "",
@@ -667,7 +675,8 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
       progressBar: document.querySelector("#progressBar"),
       sections: [...document.querySelectorAll(".section")],
       stepButtons: [...document.querySelectorAll(".step-button")],
-      modeButtons: [...document.querySelectorAll(".choice")],
+      modeButtons: [...document.querySelectorAll("[data-mode]")],
+      outputFormatButtons: [...document.querySelectorAll("[data-output-format]")],
       sourceUrl: document.querySelector("#sourceUrl"),
       reportFrom: document.querySelector("#reportFrom"),
       reportTo: document.querySelector("#reportTo"),
@@ -716,17 +725,46 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
 
     function buildPrompt() {
       const isYouth = state.mode === "Jugend";
+      const outputRules = {
+        "Printmedien": {
+          request: "Bitte erstelle ausschließlich einen Zeitungsartikel für die Arheilger Post. Keine SGA-App-News und keinen WhatsApp-Post ausgeben.",
+          detail: `Wichtige Regeln für den Zeitungsartikel:
+- Schreibe sachlich, sportlich und lebendig.
+- Beginne mit einem spannenden Vorspann/Lead über die wichtigsten Ereignisse, Tendenzen und Auffälligkeiten des Spieltags.
+- ${isYouth
+  ? "Sortiere nach Spielklasse: Hessenliga, Verbandsliga, Gruppenliga, Kreisoberliga, Kreisliga A, Kreisliga B."
+  : "Sortiere nach Spielklasse: Regionalliga, Südwest-Liga, Hessenliga, Verbandsliga, Gruppenliga, Kreisoberliga, Kreisliga A, Kreisliga B."}
+- ${isYouth
+  ? "Gliedere den Mannschaftsteil nach Möglichkeit in Ebene-Absätze, vor allem Landesebene und Kreisebene. Innerhalb dieser Absätze keine weiteren Absätze machen."
+  : "Gliedere den Mannschaftsteil in genau drei Absätze: 1. Regionale Ebene, 2. Landesebene, 3. Kreisebene. Innerhalb dieser drei Absätze keine weiteren Absätze machen."}
+- Pro Mannschaft bitte dieses Format verwenden: Mannschaft und Liga fett, danach Doppelpunkt, dann der Text direkt dahinter.
+- Beispiel: **Damen 30 - Hessenliga:** Die Damen 30 feierten einen knappen 5:4-Heimsieg ...
+- Nur Mannschaft und Liga werden fett geschrieben. Der weitere Text wird nicht fett geschrieben.
+- Zeitungston: sachlich genug, aber nicht trocken.`
+        },
+        "SGA App": {
+          request: "Bitte erstelle ausschließlich eine kurze News für die SGA-App. Keinen Zeitungsartikel und keinen WhatsApp-Post ausgeben.",
+          detail: `Wichtige Regeln für die SGA-App:
+- Kürzer und übersichtlicher schreiben als ein Zeitungsartikel.
+- Wichtigste Ergebnisse, Teamleistungen und Highlights nennen.
+- Mannschaften und Ligen klar benennen.
+- Knappe Spiele, Match-Tie-Breaks, besondere Teamleistungen und Heimspiele hervorheben.
+- Vorschau auf Heimspiele ergänzen, falls Daten vorhanden sind.`
+        },
+        "WhatsApp": {
+          request: "Bitte erstelle ausschließlich einen lockeren WhatsApp-Post mit Emojis. Keinen Zeitungsartikel und keine SGA-App-News ausgeben.",
+          detail: `Wichtige Regeln für WhatsApp:
+- Locker, motivierend und mit passenden Emojis schreiben.
+- Ergebnisse übersichtlich darstellen.
+- Heimspiele besonders hervorheben.
+- Ton: positiv, vereinsnah und aktivierend.
+- Keine zu langen Absätze; gut kopierbar für WhatsApp halten.`
+        }
+      };
+      const selectedOutput = outputRules[state.outputFormat] || outputRules["Printmedien"];
       const nameRule = isYouth
         ? "Bei Jugendberichten immer nur Vornamen nennen. Keine Nachnamen - weder im Zeitungsartikel noch in der App-News oder im WhatsApp-Post."
         : "Bei Erwachsenen immer Vorname Nachname nennen. Spielernamen nicht fett schreiben.";
-
-      const sortRule = isYouth
-        ? "Sortiere nach Spielklasse: Hessenliga, Verbandsliga, Gruppenliga, Kreisoberliga, Kreisliga A, Kreisliga B."
-        : "Sortiere nach Spielklasse: Regionalliga, Südwest-Liga, Hessenliga, Verbandsliga, Gruppenliga, Kreisoberliga, Kreisliga A, Kreisliga B.";
-
-      const paragraphRule = isYouth
-        ? "Gliedere den Mannschaftsteil nach Möglichkeit in Ebene-Absätze, vor allem Landesebene und Kreisebene. Innerhalb dieser Absätze keine weiteren Absätze machen."
-        : "Gliedere den Mannschaftsteil in genau drei Absätze: 1. Regionale Ebene, 2. Landesebene, 3. Kreisebene. Innerhalb dieser drei Absätze keine weiteren Absätze machen.";
 
       const previewRule = state.includePreview
         ? `Am Ende eine Vorschau auf die nächsten Heimspiele am Woogsweg einbauen. Für die Vorschau nur Spiele im Zeitraum ${state.previewFrom || "[Startdatum eintragen]"} bis ${state.previewTo || "[Enddatum eintragen]"} berücksichtigen. Besonders Heimspiele hervorheben. Vorschau-Quelle: ${state.previewLink || "[Link zur Begegnungsübersicht einfügen]"}`
@@ -734,19 +772,12 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
 
       return `Du fungierst als digitaler Pressesprecher der SG Arheilgen Tennis. Erstelle basierend auf den beigefügten Rohdaten aus nuLiga, Screenshots, kopierten Tabellen und Zusatzinformationen der Mannschaften einen Spieltagsbericht nach dem festen SGA-Schema.
 
-Bitte erstelle drei Formate:
-1. Einen Zeitungsartikel für die Arheilger Post
-2. Eine kurze News für die SGA-App
-3. Einen lockeren WhatsApp-Post mit Emojis
+Gewähltes Ausgabeformat: ${state.outputFormat}
+${selectedOutput.request}
 
-Wichtige Regeln für den Zeitungsartikel:
-- Schreibe sachlich, sportlich und lebendig.
-- Beginne mit einem spannenden Vorspann/Lead über die wichtigsten Ereignisse, Tendenzen und Auffälligkeiten des Spieltags.
-- ${sortRule}
-- ${paragraphRule}
-- Pro Mannschaft bitte dieses Format verwenden: Mannschaft und Liga fett, danach Doppelpunkt, dann der Text direkt dahinter.
-- Beispiel: **Damen 30 - Hessenliga:** Die Damen 30 feierten einen knappen 5:4-Heimsieg ...
-- Nur Mannschaft und Liga werden fett geschrieben. Der weitere Text wird nicht fett geschrieben.
+${selectedOutput.detail}
+
+Allgemeine Regeln:
 - ${nameRule}
 - Erwähne die Tabellensituation, sofern sie aus den Daten hervorgeht, zum Beispiel Aufstiegskampf, Klassenerhalt oder Bedeutung des Sieges.
 - Hebe Siege gegen Spielerinnen oder Spieler mit deutlich besserer LK hervor.
@@ -756,21 +787,10 @@ Wichtige Regeln für den Zeitungsartikel:
 - Berücksichtige die Zusatztexte der Mannschaften und baue passende Elemente sinnvoll in den Text ein.
 - ${previewRule}
 
-Für die SGA-App:
-- Kürzer und übersichtlicher schreiben.
-- Wichtigste Ergebnisse, Teamleistungen und Highlights nennen.
-- Vorschau auf Heimspiele ergänzen, falls Daten vorhanden sind.
-
-Für WhatsApp:
-- Locker, motivierend und mit Emojis schreiben.
-- Ergebnisse übersichtlich darstellen.
-- Heimspiele besonders hervorheben.
-- Ton: positiv, vereinsnah und aktivierend.
-
 Kontrolle vor Ausgabe:
 - Stimmen Mannschaften, Ligen und Ergebnisse?
 - Stimmen die Namen? Bei Screenshots besonders sorgfältig prüfen.
-- Ist der Tonfall für die Zeitung sachlich genug?
+- Passt der Tonfall zum gewählten Ausgabeformat ${state.outputFormat}?
 - Sind die Termine und Uhrzeiten der Vorschau korrekt?
 ${isYouth ? "- Sind wirklich alle Nachnamen bei Jugendlichen entfernt?" : ""}
 
@@ -894,6 +914,9 @@ ${state.teamNotes || "[Optional: Mannschaftsberichte, WhatsApp-Texte oder Besond
       });
       els.modeButtons.forEach(button => {
         button.classList.toggle("active", button.dataset.mode === state.mode);
+      });
+      els.outputFormatButtons.forEach(button => {
+        button.classList.toggle("active", button.dataset.outputFormat === state.outputFormat);
       });
 
       els.previewFields.style.display = state.includePreview ? "grid" : "none";
@@ -1075,6 +1098,13 @@ ${state.teamNotes || "[Optional: Mannschaftsberichte, WhatsApp-Texte oder Besond
       });
     });
 
+    els.outputFormatButtons.forEach(button => {
+      button.addEventListener("click", () => {
+        state.outputFormat = button.dataset.outputFormat;
+        render();
+      });
+    });
+
     ["sourceUrl", "reportFrom", "reportTo", "links", "copiedData", "teamNotes", "previewLink", "previewFrom", "previewTo"].forEach(name => {
       els[name].addEventListener("input", event => setField(name, event.target.value));
     });
@@ -1134,6 +1164,7 @@ ${state.teamNotes || "[Optional: Mannschaftsberichte, WhatsApp-Texte oder Besond
       Object.assign(state, {
         step: 1,
         mode: "Erwachsene",
+        outputFormat: "Printmedien",
         sourceUrl: defaultSourceUrl,
         reportFrom: "",
         reportTo: "",
