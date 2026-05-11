@@ -373,7 +373,11 @@ function serveStatic(req, res, url) {
 
   fs.readFile(file, (error, data) => {
     if (error) return send(res, 404, "Not found", "text/plain; charset=utf-8");
-    const type = file.endsWith(".html") ? "text/html; charset=utf-8" : "application/octet-stream";
+    const type = file.endsWith(".html")
+      ? "text/html; charset=utf-8"
+      : file.endsWith(".ics")
+        ? "text/calendar; charset=utf-8"
+        : "application/octet-stream";
     send(res, 200, data, type);
   });
 }
