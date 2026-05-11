@@ -309,6 +309,50 @@
       font-size: 13px;
     }
 
+    .preview-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .preview-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 14px;
+    }
+
+    .preview-card.home {
+      border-color: rgba(15, 118, 110, .35);
+      background: #ecfdf5;
+    }
+
+    .preview-card strong {
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    .preview-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 8px;
+    }
+
+    .preview-badge {
+      border-radius: 999px;
+      background: var(--soft);
+      color: var(--muted);
+      padding: 3px 9px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .preview-card.home .preview-badge:first-child {
+      background: var(--accent-2);
+      color: #fff;
+    }
+
     .infobox, .checklist {
       margin-top: 20px;
       border: 1px solid var(--line);
@@ -590,14 +634,15 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
 
         <section class="section" data-section="4">
           <h2>4. Vorschau vorbereiten</h2>
-          <p>Für die Vorschau auf das nächste Wochenende Zeitraum und Begegnungsübersicht eintragen. Heimspiele am Woogsweg werden im Prompt besonders hervorgehoben.</p>
+          <p>Wähle den Zeitraum aus. Die App nutzt den SGA-Medenspielkalender 2026 und zeigt direkt an, welche Spiele in diesem Zeitraum anstehen.</p>
           <label class="toggle"><input type="checkbox" id="includePreview" checked>Vorschau auf nächste Heimspiele am Woogsweg erstellen</label>
-          <div id="previewFields" class="grid-2">
-            <label class="field"><span>Vorschau-Link / clubMeetings</span><textarea id="previewLink" rows="3" placeholder="https://htv.liga.nu/.../clubMeetings"></textarea></label>
+          <div id="previewFields">
             <div class="grid-2">
               <label class="field"><span>Von</span><input type="date" id="previewFrom"></label>
               <label class="field"><span>Bis</span><input type="date" id="previewTo"></label>
             </div>
+            <div class="status" id="previewStatus"></div>
+            <div class="preview-list" id="previewList"></div>
           </div>
           <label class="toggle"><input type="checkbox" id="includeTabellenlage" checked>Tabellensituation erwähnen, falls aus Daten ersichtlich</label>
         </section>
@@ -641,6 +686,7 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
     const totalSteps = 5;
     const defaultPreviewLink = "https://htv.liga.nu/cgi-bin/WebObjects/nuLigaTENDE.woa/wa/clubMeetings";
     const defaultSourceUrl = "https://htv.liga.nu/cgi-bin/WebObjects/nuLigaTENDE.woa/4/wa/clubMeetings?club=24783";
+    const calendarFile = "data/SGA%20Medenspielkalender%202026.ics";
     const apiBase = location.protocol === "file:" ? "http://127.0.0.1:4173" : "";
 
     const state = {
@@ -662,6 +708,8 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
       previewTo: "",
       includePreview: true,
       includeTabellenlage: true,
+      calendarEvents: [],
+      calendarStatus: "Kalender wird geladen ...",
       generatedText: ""
     };
 
@@ -689,9 +737,10 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
       links: document.querySelector("#links"),
       copiedData: document.querySelector("#copiedData"),
       teamNotes: document.querySelector("#teamNotes"),
-      previewLink: document.querySelector("#previewLink"),
       previewFrom: document.querySelector("#previewFrom"),
       previewTo: document.querySelector("#previewTo"),
+      previewStatus: document.querySelector("#previewStatus"),
+      previewList: document.querySelector("#previewList"),
       includePreview: document.querySelector("#includePreview"),
       includeTabellenlage: document.querySelector("#includeTabellenlage"),
       previewFields: document.querySelector("#previewFields"),
@@ -719,8 +768,101 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
     }
 
     function save() {
-      const { step, authenticated, passwordRequired, openaiEnabled, ...payload } = state;
+      const { step, authenticated, passwordRequired, openaiEnabled, calendarEvents, calendarStatus, ...payload } = state;
       localStorage.setItem(storageKey, JSON.stringify(payload));
+    }
+
+    function parseIcsDate(value) {
+      const match = String(value || "").match(/^(\d{4})(\d{2})(\d{2})T?(\d{2})?(\d{2})?/);
+      if (!match) return { date: "", time: "" };
+      return {
+        date: `${match[1]}-${match[2]}-${match[3]}`,
+        time: match[4] ? `${match[4]}:${match[5] || "00"}` : ""
+      };
+    }
+
+    function cleanIcsText(value) {
+      return String(value || "")
+        .replace(/\\n/g, " ")
+        .replace(/\\,/g, ",")
+        .replace(/\\;/g, ";")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function parseCalendar(raw) {
+      const unfolded = String(raw || "").replace(/\r?\n[ \t]/g, "");
+      const events = [];
+      for (const block of unfolded.split("BEGIN:VEVENT").slice(1)) {
+        const lines = block.split(/\r?\n/);
+        const event = {};
+        for (const line of lines) {
+          if (line === "END:VEVENT") break;
+          const index = line.indexOf(":");
+          if (index < 0) continue;
+          const key = line.slice(0, index).split(";")[0];
+          event[key] = cleanIcsText(line.slice(index + 1));
+        }
+        const start = parseIcsDate(event.DTSTART);
+        const end = parseIcsDate(event.DTEND);
+        const summary = event.SUMMARY || "";
+        const summaryMatch = summary.match(/^\((.*)\)\s+(.*?)\s+-\s+(.*)$/);
+        const league = summaryMatch ? summaryMatch[1] : "";
+        const home = summaryMatch ? summaryMatch[2] : "";
+        const guest = summaryMatch ? summaryMatch[3] : "";
+        const location = event.LOCATION || "";
+        const isHome = /^SG Arheilgen\b/i.test(location) || /^SG Arheilgen\b/i.test(home);
+        if (start.date && summary) {
+          events.push({
+            date: start.date,
+            time: start.time,
+            endTime: end.time,
+            location,
+            summary,
+            league,
+            home,
+            guest,
+            isHome
+          });
+        }
+      }
+      return events.sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+    }
+
+    async function loadCalendar() {
+      try {
+        const response = await fetch(calendarFile, { cache: "no-store" });
+        if (!response.ok) throw new Error("Kalenderdatei nicht gefunden.");
+        state.calendarEvents = parseCalendar(await response.text());
+        state.calendarStatus = `${state.calendarEvents.length} Termine aus dem SGA-Medenspielkalender geladen.`;
+      } catch (error) {
+        state.calendarEvents = [];
+        state.calendarStatus = "Der SGA-Medenspielkalender konnte nicht geladen werden. Bitte prüfen, ob die ICS-Datei mit hochgeladen wurde.";
+      }
+      render();
+    }
+
+    function formatDate(date) {
+      if (!date) return "";
+      const [year, month, day] = date.split("-");
+      return `${day}.${month}.${year}`;
+    }
+
+    function selectedPreviewGames() {
+      if (!state.includePreview || !state.previewFrom || !state.previewTo) return [];
+      const from = state.previewFrom <= state.previewTo ? state.previewFrom : state.previewTo;
+      const to = state.previewFrom <= state.previewTo ? state.previewTo : state.previewFrom;
+      return state.calendarEvents.filter(event => event.date >= from && event.date <= to);
+    }
+
+    function previewGamesText() {
+      const games = selectedPreviewGames();
+      if (!state.includePreview || !games.length) return "";
+      return games.map(event => {
+        const opponent = event.isHome ? event.guest : event.home;
+        const venue = event.isHome ? "Heimspiel am Woogsweg" : `Auswärtsspiel bei ${event.location || opponent}`;
+        return `- ${formatDate(event.date)}, ${event.time} Uhr: ${event.league || "Spiel"} - ${event.home} gegen ${event.guest} (${venue})`;
+      }).join("\n");
     }
 
     function buildPrompt() {
@@ -766,8 +908,9 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
         ? "Bei Jugendberichten immer nur Vornamen nennen. Keine Nachnamen - weder im Zeitungsartikel noch in der App-News oder im WhatsApp-Post."
         : "Bei Erwachsenen immer Vorname Nachname nennen. Spielernamen nicht fett schreiben.";
 
+      const previewText = previewGamesText();
       const previewRule = state.includePreview
-        ? `Am Ende eine Vorschau auf die nächsten Heimspiele am Woogsweg einbauen. Für die Vorschau nur Spiele im Zeitraum ${state.previewFrom || "[Startdatum eintragen]"} bis ${state.previewTo || "[Enddatum eintragen]"} berücksichtigen. Besonders Heimspiele hervorheben. Vorschau-Quelle: ${state.previewLink || "[Link zur Begegnungsübersicht einfügen]"}`
+        ? `Am Ende eine kurze Vorschau aus dem SGA-Medenspielkalender 2026 einbauen. Für die Vorschau nur Spiele im Zeitraum ${state.previewFrom || "[Startdatum eintragen]"} bis ${state.previewTo || "[Enddatum eintragen]"} berücksichtigen. Heimspiele am Woogsweg besonders hervorheben. ${previewText ? "Nutze ausschließlich die unten aufgeführten Kalendertermine." : "Wenn keine Kalendertermine unten aufgeführt sind, keine Termine erfinden."}`
         : "Keine Vorschau erstellen, falls keine Vorschau-Daten vorhanden sind.";
 
       return `Du fungierst als digitaler Pressesprecher der SG Arheilgen Tennis. Erstelle basierend auf den beigefügten Rohdaten aus nuLiga, Screenshots, kopierten Tabellen und Zusatzinformationen der Mannschaften einen Spieltagsbericht nach dem festen SGA-Schema.
@@ -801,7 +944,10 @@ Kopierte nuLiga-Daten / Tabellen:
 ${state.copiedData || "[Optional: kopierte Tabellen oder Ergebnisse einfügen]"}
 
 Zusatzinfos / Mannschaftszitate / Screenshots in Textform:
-${state.teamNotes || "[Optional: Mannschaftsberichte, WhatsApp-Texte oder Besonderheiten einfügen]"}`;
+${state.teamNotes || "[Optional: Mannschaftsberichte, WhatsApp-Texte oder Besonderheiten einfügen]"}
+
+Vorschau / kommende Spiele aus dem SGA-Medenspielkalender 2026:
+${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder gefunden.]"}`;
     }
 
     function renderChecks() {
@@ -820,6 +966,45 @@ ${state.teamNotes || "[Optional: Mannschaftsberichte, WhatsApp-Texte oder Besond
       els.checks.innerHTML = items.map(item => `<div><span>✓</span><span>${item}</span></div>`).join("");
     }
 
+    function renderPreviewGames() {
+      if (!state.includePreview) {
+        els.previewStatus.textContent = "";
+        els.previewList.innerHTML = "";
+        return;
+      }
+
+      if (!state.calendarEvents.length) {
+        els.previewStatus.textContent = state.calendarStatus;
+        els.previewStatus.classList.add("error");
+        els.previewList.innerHTML = "";
+        return;
+      }
+
+      els.previewStatus.classList.remove("error");
+      if (!state.previewFrom || !state.previewTo) {
+        els.previewStatus.textContent = `${state.calendarStatus} Bitte Zeitraum auswählen.`;
+        els.previewList.innerHTML = "";
+        return;
+      }
+
+      const games = selectedPreviewGames();
+      const homeCount = games.filter(event => event.isHome).length;
+      els.previewStatus.textContent = games.length
+        ? `${games.length} Spiele im gewählten Zeitraum gefunden, davon ${homeCount} Heimspiele.`
+        : "Für diesen Zeitraum stehen laut Kalender keine Spiele an.";
+
+      els.previewList.innerHTML = games.map(event => `
+        <article class="preview-card ${event.isHome ? "home" : ""}">
+          <strong>${escapeHtml(formatDate(event.date))} · ${escapeHtml(event.time || "Uhrzeit offen")} Uhr · ${escapeHtml(event.league || "Spiel")}</strong>
+          <div>${escapeHtml(event.home || "Heimteam")} - ${escapeHtml(event.guest || "Gastteam")}</div>
+          <div class="preview-badges">
+            <span class="preview-badge">${event.isHome ? "Heimspiel Woogsweg" : "Auswärts"}</span>
+            <span class="preview-badge">${escapeHtml(event.location || "Ort offen")}</span>
+          </div>
+        </article>
+      `).join("");
+    }
+
     function bindStateToInputs() {
       els.sourceUrl.value = state.sourceUrl;
       els.reportFrom.value = state.reportFrom;
@@ -827,7 +1012,6 @@ ${state.teamNotes || "[Optional: Mannschaftsberichte, WhatsApp-Texte oder Besond
       els.links.value = state.links;
       els.copiedData.value = state.copiedData;
       els.teamNotes.value = state.teamNotes;
-      els.previewLink.value = state.previewLink;
       els.previewFrom.value = state.previewFrom;
       els.previewTo.value = state.previewTo;
       els.includePreview.checked = state.includePreview;
@@ -932,6 +1116,7 @@ ${state.teamNotes || "[Optional: Mannschaftsberichte, WhatsApp-Texte oder Besond
         els.generateStatus.classList.remove("error");
       }
       renderReports();
+      renderPreviewGames();
       renderChecks();
       save();
     }
@@ -1105,7 +1290,7 @@ ${state.teamNotes || "[Optional: Mannschaftsberichte, WhatsApp-Texte oder Besond
       });
     });
 
-    ["sourceUrl", "reportFrom", "reportTo", "links", "copiedData", "teamNotes", "previewLink", "previewFrom", "previewTo"].forEach(name => {
+    ["sourceUrl", "reportFrom", "reportTo", "links", "copiedData", "teamNotes", "previewFrom", "previewTo"].forEach(name => {
       els[name].addEventListener("input", event => setField(name, event.target.value));
     });
 
@@ -1177,6 +1362,7 @@ ${state.teamNotes || "[Optional: Mannschaftsberichte, WhatsApp-Texte oder Besond
         previewTo: "",
         includePreview: true,
         includeTabellenlage: true,
+        calendarStatus: state.calendarStatus,
         generatedText: ""
       });
       bindStateToInputs();
@@ -1187,6 +1373,7 @@ ${state.teamNotes || "[Optional: Mannschaftsberichte, WhatsApp-Texte oder Besond
     load();
     bindStateToInputs();
     refreshSession();
+    loadCalendar();
   </script>
 </body>
 </html>
