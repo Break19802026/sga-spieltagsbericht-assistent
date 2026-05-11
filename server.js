@@ -377,7 +377,9 @@ function serveStatic(req, res, url) {
       ? "text/html; charset=utf-8"
       : file.endsWith(".ics")
         ? "text/calendar; charset=utf-8"
-        : "application/octet-stream";
+        : file.endsWith(".png")
+          ? "image/png"
+          : "application/octet-stream";
     send(res, 200, data, type);
   });
 }
