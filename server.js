@@ -270,6 +270,162 @@ function splitAppChatMessages(text) {
     .map((text, index) => ({ id: `app-chat-${index}`, text, selected: true }));
 }
 
+function decodeJwtPayload(token) {
+  try {
+    const payload = String(token || "").split(".")[1];
+    if (!payload) return null;
+    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+async function appackGraphql(token, query, variables = {}) {
+  const response = await fetch("https://api.appack.de/graphql", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "User-Agent": "Mozilla/5.0 SGA-Spieltagsbericht-Assistent"
+    },
+    body: JSON.stringify({ query, variables })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.errors?.length) {
+    const message = payload.errors?.map(error => error.message).join(" | ") || `Appack antwortet mit HTTP ${response.status}`;
+    throw new Error(message);
+  }
+  return payload.data || {};
+}
+
+function normalizeChatMessage(message, index) {
+  const author = message.from?.name || message.nickname || "Unbekannt";
+  const created = message.created ? new Date(message.created) : null;
+  const dateLabel = created && !Number.isNaN(created.getTime())
+    ? created.toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" })
+    : "";
+  const body = cleanText(message.body || "");
+  const attachments = Array.isArray(message.files) && message.files.length
+    ? `\nAnhänge: ${message.files.map(file => file.name || file.contentType || "Datei").join(", ")}`
+    : "";
+  const poll = message.poll?.title ? `\nUmfrage: ${message.poll.title}` : "";
+  const text = [`${dateLabel}${dateLabel ? " - " : ""}${author}:`, body || "[Nachricht ohne Text]", attachments, poll]
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+
+  return {
+    id: message.id || `app-chat-${index}`,
+    created: message.created || "",
+    author,
+    text,
+    selected: true
+  };
+}
+
+function messageInDateRange(message, from, to) {
+  if (!from && !to) return true;
+  if (!message.created) return true;
+  const date = new Date(message.created);
+  if (Number.isNaN(date.getTime())) return true;
+  const isoDate = date.toISOString().slice(0, 10);
+  if (from && isoDate < from) return false;
+  if (to && isoDate > to) return false;
+  return true;
+}
+
+async function loadAppackChatMessages(token, channelId, from, to) {
+  const query = `
+    query getChatMessages($channel: ID!, $order: ChatMessageOrder!, $from: String, $limit: Int) {
+      getChatMessages(channel: $channel, order: $order, from: $from, limit: $limit) {
+        id
+        body
+        nickname
+        created
+        files { id contentType name downloadUrl }
+        poll { id title }
+        from { name digitalAssistant }
+      }
+    }
+  `;
+  const all = [];
+  const seen = new Set();
+  const fetchPage = async (order, anchor, limit) => appackGraphql(token, query, { channel: channelId, order, from: anchor, limit })
+    .catch(async error => {
+      if (!/ChatMessageOrder|Past|Future/i.test(error.message)) throw error;
+      return appackGraphql(token, query, { channel: channelId, order: order.toUpperCase(), from: anchor, limit });
+    });
+
+  const newestData = await fetchPage("Future", null, 100);
+  const newestBatch = newestData.getChatMessages || [];
+  for (const message of newestBatch) {
+    if (!seen.has(message.id)) {
+      seen.add(message.id);
+      all.push(message);
+    }
+  }
+
+  let anchor = newestBatch[0]?.id || null;
+
+  for (let page = 0; anchor && page < 8; page += 1) {
+    const data = await fetchPage("Past", anchor, 80);
+    const batch = data.getChatMessages || [];
+    if (!batch.length) break;
+
+    for (const message of batch) {
+      if (!seen.has(message.id)) {
+        seen.add(message.id);
+        all.push(message);
+      }
+    }
+
+    const oldest = batch[0];
+    anchor = oldest?.id;
+    const oldestDate = oldest?.created ? new Date(oldest.created).toISOString().slice(0, 10) : "";
+    if (from && oldestDate && oldestDate < from) break;
+  }
+
+  return all
+    .filter(message => messageInDateRange(message, from, to))
+    .sort((a, b) => String(a.created).localeCompare(String(b.created)))
+    .map(normalizeChatMessage)
+    .filter(message => !/^\[Nachricht ohne Text\]$/i.test(message.text));
+}
+
+async function extractAppChatMessagesFromApi(chatUrl, from, to) {
+  const parsed = new URL(chatUrl);
+  const token = parsed.searchParams.get("jwt") || "";
+  if (!token) return [];
+
+  const payload = decodeJwtPayload(token);
+  if (payload?.exp && payload.exp * 1000 < Date.now()) {
+    throw new Error("Der App-Chat-Link ist abgelaufen. Bitte einen frischen Link aus der SG Arheilgen App kopieren.");
+  }
+
+  const channelsQuery = `
+    query subscribedChatChannels {
+      subscribedChatChannels {
+        id
+        label
+        groupSpaceName
+        lastMessage { body created from { name } }
+      }
+    }
+  `;
+  const data = await appackGraphql(token, channelsQuery);
+  const channels = data.subscribedChatChannels || [];
+  const channel = channels.find(item => String(item.label || "").trim().toLowerCase() === "ergebnisse medenrunde")
+    || channels.find(item => /ergebnisse\s+medenrunde/i.test(item.label || ""))
+    || channels.find(item => /medenrunde/i.test(item.label || ""));
+
+  if (!channel) {
+    throw new Error("Der Chat „Ergebnisse Medenrunde“ wurde mit diesem Link nicht gefunden.");
+  }
+
+  return loadAppackChatMessages(token, channel.id, from, to);
+}
+
 function extractAppChatMessages(html, from, to) {
   const text = cleanText(html)
     .replace(/\n{2,}/g, "\n")
@@ -311,6 +467,23 @@ async function handleAppChat(req, res) {
 
     if (parsed.protocol !== "https:" || parsed.hostname !== "application.appack.de") {
       return sendJson(res, 400, { error: "Aus Sicherheitsgründen sind nur Links von application.appack.de erlaubt." });
+    }
+
+    try {
+      const apiMessages = await extractAppChatMessagesFromApi(chatUrl, from, to);
+      if (apiMessages.length) {
+        return sendJson(res, 200, {
+          text: apiMessages.map(message => message.text).join("\n\n---\n\n"),
+          messages: apiMessages,
+          warning: "Import über die Appack-Schnittstelle erfolgreich."
+        });
+      }
+    } catch (error) {
+      const message = error.message || "";
+      if (/abgelaufen|nicht gefunden|unauthorized|forbidden|jwt|token|auth/i.test(message)) {
+        return sendJson(res, 422, { error: message, manualImport: true });
+      }
+      console.warn("Appack API import failed:", message);
     }
 
     const response = await fetch(chatUrl, {
