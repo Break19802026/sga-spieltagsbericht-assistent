@@ -251,6 +251,96 @@ async function handleDiscover(req, res, url) {
   }
 }
 
+function splitAppChatMessages(text) {
+  const cleaned = String(text || "")
+    .replace(/\r/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (!cleaned) return [];
+
+  const paragraphs = cleaned.split(/\n\s*\n/).map(part => part.trim()).filter(Boolean);
+  const chunks = paragraphs.length > 1
+    ? paragraphs
+    : cleaned.split(/\n(?=(?:[A-ZÄÖÜ][A-Za-zÄÖÜäöüß.' -]{1,40}:|(?:Mo|Di|Mi|Do|Fr|Sa|So|Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag)\b|\d{1,2}\.\d{1,2}\.))/).map(part => part.trim()).filter(Boolean);
+
+  return chunks
+    .map(text => text.replace(/\n+/g, "\n").trim())
+    .filter(text => text.length > 8)
+    .filter(text => !/^(ausgewählter zeitraum|ergebnisse medenrunde|gruppenchat|letzte nachricht)$/i.test(text))
+    .map((text, index) => ({ id: `app-chat-${index}`, text, selected: true }));
+}
+
+function extractAppChatMessages(html, from, to) {
+  const text = cleanText(html)
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+
+  if (!text) return [];
+  const lower = text.toLowerCase();
+  const marker = lower.indexOf("ergebnisse medenrunde");
+  if (marker < 0) return [];
+
+  const excerpt = text.slice(marker, marker + 14000);
+  const lines = excerpt
+    .split("\n")
+    .map(line => line.trim())
+    .filter(Boolean)
+    .filter(line => !/^(zurück|suchen|konversation öffnen|gruppenchat)$/i.test(line));
+
+  const messages = splitAppChatMessages(lines.join("\n"));
+  const range = [from, to].filter(Boolean).join(" bis ");
+  return range
+    ? messages.map(message => ({ ...message, meta: `Ausgewählter Zeitraum: ${range}` }))
+    : messages;
+}
+
+async function handleAppChat(req, res) {
+  try {
+    const body = JSON.parse(await readBody(req) || "{}");
+    const chatUrl = String(body.url || "").trim();
+    const from = String(body.from || "").trim();
+    const to = String(body.to || "").trim();
+    if (!chatUrl) return sendJson(res, 400, { error: "Bitte den App-Chat-Link einfügen." });
+
+    let parsed;
+    try {
+      parsed = new URL(chatUrl);
+    } catch {
+      return sendJson(res, 400, { error: "Der App-Chat-Link ist ungültig." });
+    }
+
+    if (parsed.protocol !== "https:" || parsed.hostname !== "application.appack.de") {
+      return sendJson(res, 400, { error: "Aus Sicherheitsgründen sind nur Links von application.appack.de erlaubt." });
+    }
+
+    const response = await fetch(chatUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 SGA-Spieltagsbericht-Assistent",
+        "Accept": "text/html,application/xhtml+xml"
+      }
+    });
+    const html = await response.text();
+    if (!response.ok) throw new Error(`Der App-Chat antwortet mit HTTP ${response.status}`);
+
+    const messages = extractAppChatMessages(html, from, to);
+    if (!messages.length) {
+      return sendJson(res, 422, {
+        error: "Der Chat ist nicht direkt auslesbar. Wahrscheinlich werden die Nachrichten erst nach Anmeldung in der App geladen.",
+        manualImport: true
+      });
+    }
+
+    const text = messages.map(message => message.text).join("\n\n---\n\n");
+    sendJson(res, 200, {
+      text,
+      messages,
+      warning: "Direktimport erfolgreich. Bitte kurz prüfen, ob der ausgewählte Zeitraum vollständig enthalten ist."
+    });
+  } catch (error) {
+    sendJson(res, 502, { error: error.message || "Der App-Chat konnte nicht gelesen werden." });
+  }
+}
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let body = "";
@@ -398,10 +488,11 @@ const server = http.createServer((req, res) => {
   if (req.method === "POST" && url.pathname === "/api/logout") return handleLogout(req, res);
   if (url.pathname.startsWith("/api/") && !requireAuth(req, res)) return;
   if (req.method === "GET" && url.pathname === "/api/reports") return handleDiscover(req, res, url);
+  if (req.method === "POST" && url.pathname === "/api/app-chat") return handleAppChat(req, res);
   if (req.method === "POST" && url.pathname === "/api/download") return handleDownload(req, res);
   if (req.method === "POST" && url.pathname === "/api/generate") return handleGenerate(req, res);
   if (req.method === "GET") return serveStatic(req, res, url);
-  send(res, 405, { error: "Methode nicht unterstützt." });
+  send(res, 405, { error: "Methode nicht unterstützt. Bitte prüfen, ob der lokale Server mit der aktuellen Version neu gestartet wurde." });
 });
 
 server.listen(port, host, () => {
