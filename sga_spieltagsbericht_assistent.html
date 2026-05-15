@@ -311,13 +311,16 @@
     }
 
     .report-title {
+      display: block;
       margin-bottom: 4px;
       font-weight: 800;
     }
 
     .report-meta {
+      display: block;
       color: var(--muted);
       font-size: 13px;
+      white-space: pre-wrap;
     }
 
     .inline-summary {
@@ -736,6 +739,25 @@
           <label class="field"><span>Zusatzinfos / Mannschaftszitate</span><textarea id="teamNotes" rows="12" placeholder="Beispiel:
 Damen 30 feiern 5:4-Heimsieg. Kati bewies im Match-Tie-Break starke Nerven.
 Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></textarea></label>
+          <div class="import-panel">
+            <div class="import-head">
+              <div>
+                <strong>SG Arheilgen App Chat importieren</strong>
+                <p>Für den Chat „Ergebnisse Medenrunde“ wird der Zeitraum aus Schritt 2 verwendet. Der Link wird nur für diesen Import genutzt und nicht dauerhaft in der App gespeichert.</p>
+              </div>
+            </div>
+            <label class="field"><span>App-Chat-Link</span><input type="text" id="chatUrl" placeholder="Link zum SG Arheilgen App Chat einfügen ..."></label>
+            <label class="field"><span>Chat-Text, falls der Direktimport eine Anmeldung benötigt</span><textarea id="chatRawText" rows="7" placeholder="Optional: Nachrichten aus dem Chat „Ergebnisse Medenrunde“ für den Zeitraum aus Schritt 2 hier einfügen."></textarea></label>
+            <div class="actions">
+              <button class="btn" id="importChat">Chat importieren</button>
+              <button class="btn" id="applyChatMessages">Ausgewählte übernehmen</button>
+              <button class="btn secondary" id="selectAllChatMessages">Alle auswählen</button>
+              <button class="btn secondary" id="openChat">Chat öffnen</button>
+              <button class="btn secondary" id="pasteChat">Aus Zwischenablage übernehmen</button>
+            </div>
+            <div class="status" id="chatStatus"></div>
+            <div class="report-list" id="chatMessageList"></div>
+          </div>
           <div class="grid-2">
             <div class="infobox"><strong>✓ LK-Joker</strong><p>Siege oder knappe Niederlagen gegen deutlich bessere LK unbedingt erwähnen. Das macht den Bericht stärker und lesenswerter.</p></div>
             <div class="infobox"><strong>✓ Emotionen</strong><p>Besondere Stimmung, Regenunterbrechungen, Teamgeist oder Grillen danach als kurzen Satz ergänzen. Die KI baut es passend ein.</p></div>
@@ -833,6 +855,8 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
       links: "",
       copiedData: "",
       teamNotes: "",
+      chatRawText: "",
+      chatMessages: [],
       previewLink: defaultPreviewLink,
       previewFrom: "",
       previewTo: "",
@@ -874,6 +898,15 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
       links: document.querySelector("#links"),
       copiedData: document.querySelector("#copiedData"),
       teamNotes: document.querySelector("#teamNotes"),
+      chatUrl: document.querySelector("#chatUrl"),
+      chatRawText: document.querySelector("#chatRawText"),
+      importChat: document.querySelector("#importChat"),
+      applyChatMessages: document.querySelector("#applyChatMessages"),
+      selectAllChatMessages: document.querySelector("#selectAllChatMessages"),
+      openChat: document.querySelector("#openChat"),
+      pasteChat: document.querySelector("#pasteChat"),
+      chatStatus: document.querySelector("#chatStatus"),
+      chatMessageList: document.querySelector("#chatMessageList"),
       previewFrom: document.querySelector("#previewFrom"),
       previewTo: document.querySelector("#previewTo"),
       previewStatus: document.querySelector("#previewStatus"),
@@ -1362,6 +1395,7 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
       els.links.value = state.links;
       els.copiedData.value = state.copiedData;
       els.teamNotes.value = state.teamNotes;
+      els.chatRawText.value = state.chatRawText;
       els.previewFrom.value = state.previewFrom;
       els.previewTo.value = state.previewTo;
       els.includePreview.checked = state.includePreview;
@@ -1400,6 +1434,102 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
     function setReportStatus(text, isError = false) {
       els.reportStatus.textContent = text || "";
       els.reportStatus.classList.toggle("error", Boolean(isError));
+    }
+
+    function setChatStatus(text, isError = false) {
+      els.chatStatus.textContent = text || "";
+      els.chatStatus.classList.toggle("error", Boolean(isError));
+    }
+
+    function reportWindowLabel() {
+      if (state.reportFrom && state.reportTo) return `${formatDate(state.reportFrom)} bis ${formatDate(state.reportTo)}`;
+      if (state.reportFrom) return `ab ${formatDate(state.reportFrom)}`;
+      if (state.reportTo) return `bis ${formatDate(state.reportTo)}`;
+      return "ohne ausgewählten Zeitraum";
+    }
+
+    function appendChatTextToNotes(text, sourceLabel) {
+      const block = [
+        "### SGA App Chat - Ergebnisse Medenrunde",
+        `Zeitraum: ${reportWindowLabel()}`,
+        `Quelle: ${sourceLabel}`,
+        "",
+        String(text || "").trim()
+      ].join("\n");
+
+      state.teamNotes = [state.teamNotes.trim(), block].filter(Boolean).join("\n\n");
+      state.chatRawText = "";
+      state.chatMessages = [];
+      state.promptEdited = false;
+      bindStateToInputs();
+      render();
+      showToast("Chat-Infos übernommen");
+    }
+
+    function splitChatMessages(text) {
+      const cleaned = String(text || "")
+        .replace(/\r/g, "")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+      if (!cleaned) return [];
+
+      const paragraphs = cleaned.split(/\n\s*\n/).map(part => part.trim()).filter(Boolean);
+      const chunks = paragraphs.length > 1
+        ? paragraphs
+        : cleaned.split(/\n(?=(?:[A-ZÄÖÜ][A-Za-zÄÖÜäöüß.' -]{1,40}:|(?:Mo|Di|Mi|Do|Fr|Sa|So|Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag)\b|\d{1,2}\.\d{1,2}\.))/).map(part => part.trim()).filter(Boolean);
+
+      const usable = chunks
+        .map(text => text.replace(/\n+/g, "\n").trim())
+        .filter(text => text.length > 8)
+        .filter(text => !/^(ausgewählter zeitraum|ergebnisse medenrunde|gruppenchat|letzte nachricht)$/i.test(text));
+
+      return usable.map((text, index) => ({
+        id: `chat-${Date.now()}-${index}`,
+        text,
+        selected: true
+      }));
+    }
+
+    function setChatMessages(messages) {
+      state.chatMessages = messages.map((message, index) => ({
+        id: message.id || `chat-${Date.now()}-${index}`,
+        text: String(message.text || message).trim(),
+        selected: message.selected !== false
+      })).filter(message => message.text);
+      state.promptEdited = false;
+      render();
+      const count = state.chatMessages.length;
+      setChatStatus(count ? `${count} Nachrichten importiert. Bitte auswählen und dann übernehmen.` : "Keine passenden Nachrichten gefunden.", !count);
+    }
+
+    function renderChatMessages() {
+      els.applyChatMessages.disabled = !state.chatMessages.some(message => message.selected);
+      els.selectAllChatMessages.disabled = !state.chatMessages.length;
+      if (!state.chatMessages.length) {
+        els.chatMessageList.innerHTML = "";
+        return;
+      }
+
+      els.chatMessageList.innerHTML = state.chatMessages.map((message, index) => `
+        <label class="report-card">
+          <input type="checkbox" data-chat-index="${index}" ${message.selected ? "checked" : ""}>
+          <span>
+            <span class="report-title">Nachricht ${index + 1}</span>
+            <span class="report-meta">${escapeHtml(message.text)}</span>
+          </span>
+        </label>
+      `).join("");
+
+      els.chatMessageList.querySelectorAll("input[type='checkbox']").forEach(input => {
+        input.addEventListener("change", event => {
+          const index = Number(event.target.dataset.chatIndex);
+          state.chatMessages[index].selected = event.target.checked;
+          save();
+          renderChatMessages();
+          const selected = state.chatMessages.filter(message => message.selected).length;
+          setChatStatus(`${state.chatMessages.length} Nachrichten importiert, ${selected} ausgewählt.`);
+        });
+      });
     }
 
     function renderReports() {
@@ -1497,6 +1627,7 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
       }
       els.reviewReport.disabled = !state.openaiEnabled;
       renderReports();
+      renderChatMessages();
       renderPreviewGames();
       renderQualityCheck();
       renderChecks();
@@ -1586,6 +1717,79 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
         els.loadSelectedReports.disabled = false;
         els.findReports.disabled = false;
       }
+    }
+
+    async function importChat() {
+      const pastedText = state.chatRawText.trim();
+      if (pastedText) {
+        setChatMessages(splitChatMessages(pastedText));
+        return;
+      }
+
+      const chatUrl = els.chatUrl.value.trim();
+      if (!chatUrl) {
+        setChatStatus("Bitte den App-Chat-Link einfügen oder Chat-Text manuell in das Feld kopieren.", true);
+        return;
+      }
+
+      setChatStatus("Chat wird gelesen ...");
+      els.importChat.disabled = true;
+      try {
+        const response = await fetch(`${apiBase}/api/app-chat`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            url: chatUrl,
+            from: state.reportFrom,
+            to: state.reportTo
+          })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          const message = payload.error || "Der Chat konnte nicht gelesen werden.";
+          if (response.status === 405 || /methode nicht unterstützt/i.test(message)) {
+            throw new Error("Der lokale Server läuft noch mit einer alten Version. Bitte den lokalen Server einmal stoppen und neu starten.");
+          }
+          throw new Error(message);
+        }
+        const messages = Array.isArray(payload.messages) && payload.messages.length
+          ? payload.messages
+          : splitChatMessages(payload.text);
+        setChatMessages(messages);
+        if (payload.warning) setChatStatus(`${messages.length} Nachrichten importiert. ${payload.warning}`);
+      } catch (error) {
+        setChatStatus(`${error.message || "Direktimport nicht möglich."} Bitte den Chat öffnen, passende Nachrichten kopieren und hier einfügen.`, true);
+      } finally {
+        els.importChat.disabled = false;
+      }
+    }
+
+    async function pasteChatFromClipboard() {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (!text.trim()) {
+          setChatStatus("In der Zwischenablage wurde kein Text gefunden.", true);
+          return;
+        }
+        state.chatRawText = text;
+        state.promptEdited = false;
+        bindStateToInputs();
+        save();
+        setChatStatus("Text aus der Zwischenablage übernommen. Mit „Chat importieren“ in die Zusatzinfos übernehmen.");
+      } catch {
+        setChatStatus("Der Browser erlaubt keinen Zugriff auf die Zwischenablage. Bitte den Chat-Text manuell einfügen.", true);
+      }
+    }
+
+    function applySelectedChatMessages() {
+      const selected = state.chatMessages.filter(message => message.selected);
+      if (!selected.length) {
+        setChatStatus("Bitte mindestens eine Nachricht auswählen.", true);
+        return;
+      }
+      appendChatTextToNotes(selected.map(message => message.text).join("\n\n---\n\n"), "SG Arheilgen App Chat");
+      setChatStatus(`${selected.length} Nachrichten wurden in die Zusatzinfos übernommen.`);
     }
 
     function connectionErrorText(error) {
@@ -1753,12 +1957,31 @@ ${report}`;
       button.addEventListener("click", () => applyReportRange(button.dataset.reportRange));
     });
 
-    ["sourceUrl", "reportFrom", "reportTo", "links", "copiedData", "teamNotes", "previewFrom", "previewTo"].forEach(name => {
+    ["sourceUrl", "reportFrom", "reportTo", "links", "copiedData", "teamNotes", "chatRawText", "previewFrom", "previewTo"].forEach(name => {
       els[name].addEventListener("input", event => setField(name, event.target.value));
     });
 
     els.findReports.addEventListener("click", findReports);
     els.loadSelectedReports.addEventListener("click", loadSelectedReports);
+    els.importChat.addEventListener("click", importChat);
+    els.applyChatMessages.addEventListener("click", applySelectedChatMessages);
+    els.selectAllChatMessages.addEventListener("click", () => {
+      const allSelected = state.chatMessages.every(message => message.selected);
+      state.chatMessages = state.chatMessages.map(message => ({ ...message, selected: !allSelected }));
+      render();
+      const selected = state.chatMessages.filter(message => message.selected).length;
+      setChatStatus(`${state.chatMessages.length} Nachrichten importiert, ${selected} ausgewählt.`);
+    });
+    els.openChat.addEventListener("click", () => {
+      const chatUrl = els.chatUrl.value.trim();
+      if (!chatUrl) {
+        setChatStatus("Bitte zuerst den App-Chat-Link einfügen.", true);
+        return;
+      }
+      window.open(chatUrl, "_blank", "noopener,noreferrer");
+      setChatStatus("Chat wurde in einem neuen Tab geöffnet. Falls eine Anmeldung erscheint, dort anmelden und anschließend die passenden Nachrichten kopieren.");
+    });
+    els.pasteChat.addEventListener("click", pasteChatFromClipboard);
     els.selectAllReports.addEventListener("click", () => {
       const visible = new Set(visibleReports());
       state.reports = state.reports.map(report => visible.has(report) ? { ...report, selected: true } : report);
@@ -1856,6 +2079,8 @@ ${report}`;
         links: "",
         copiedData: "",
         teamNotes: "",
+        chatRawText: "",
+        chatMessages: [],
         previewLink: defaultPreviewLink,
         previewFrom: "",
         previewTo: "",
