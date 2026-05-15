@@ -311,6 +311,22 @@
       opacity: .58;
     }
 
+    .report-card.chat-good {
+      border-color: #86efac;
+      background: #ecfdf5;
+    }
+
+    .report-card.chat-warn {
+      border-color: #fde68a;
+      background: #fffbeb;
+    }
+
+    .report-card.chat-muted {
+      border-color: #cbd5e1;
+      background: #f8fafc;
+      opacity: .72;
+    }
+
     .report-card input {
       width: 18px;
       height: 18px;
@@ -699,7 +715,7 @@
       </div>
       <div class="progress" aria-label="Fortschritt">
         <small>Fortschritt</small>
-        <strong id="progressText">17%</strong>
+        <strong id="progressText">0%</strong>
         <div class="bar"><span id="progressBar"></span></div>
         <button class="btn secondary header-reset" id="resetAll">↻ Von vorne starten</button>
       </div>
@@ -721,12 +737,12 @@
           <p>Wähle aus, ob es um Erwachsenen- und/oder Jugendmannschaften geht und für welche Kanäle Texte erstellt werden sollen. Mehrfachauswahl ist möglich.</p>
           <h3>Mannschaftsbereich</h3>
           <div class="choices">
-            <button class="choice active" data-mode="Erwachsene"><strong>Erwachsene</strong><span>Spielerinnen und Spieler werden mit Vorname Nachname genannt.</span></button>
+            <button class="choice" data-mode="Erwachsene"><strong>Erwachsene</strong><span>Spielerinnen und Spieler werden mit Vorname Nachname genannt.</span></button>
             <button class="choice" data-mode="Jugend"><strong>Jugend</strong><span>Spielerinnen und Spieler werden ausschließlich mit Vornamen genannt.</span></button>
           </div>
           <h3 style="margin-top:24px">Ausgabeformat</h3>
           <div class="choices">
-            <button class="choice active" data-output-format="Printmedien"><strong>Printmedien</strong><span>Zeitungsartikel für die Arheilger Post.</span></button>
+            <button class="choice" data-output-format="Printmedien"><strong>Printmedien</strong><span>Zeitungsartikel für die Arheilger Post.</span></button>
             <button class="choice" data-output-format="SGA App"><strong>SGA App</strong><span>Kürzere News für die Vereins-App.</span></button>
             <button class="choice" data-output-format="WhatsApp"><strong>WhatsApp</strong><span>Lockerer Post mit Emojis für Gruppen.</span></button>
           </div>
@@ -900,7 +916,7 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
   <div class="toast" id="toast">Prompt kopiert</div>
 
   <script>
-    const storageKey = "sga-spieltagsbericht-assistent-v1";
+    const storageKey = "sga-spieltagsbericht-assistent-v2";
     const totalSteps = 6;
     const defaultPreviewLink = "https://htv.liga.nu/cgi-bin/WebObjects/nuLigaTENDE.woa/wa/clubMeetings";
     const defaultSourceUrl = "https://htv.liga.nu/cgi-bin/WebObjects/nuLigaTENDE.woa/4/wa/clubMeetings?club=24783";
@@ -914,8 +930,8 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
       authPromptVisible: false,
       generateAfterLogin: "",
       openaiEnabled: false,
-      modes: ["Erwachsene"],
-      outputFormats: ["Printmedien"],
+      modes: [],
+      outputFormats: [],
       reportLength: "Mittel",
       sourceUrl: defaultSourceUrl,
       reportFrom: "",
@@ -1034,13 +1050,11 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
     }
 
     function normalizeSelections() {
-      if (!Array.isArray(state.modes) || !state.modes.length) state.modes = ["Erwachsene"];
+      if (!Array.isArray(state.modes)) state.modes = [];
       state.modes = state.modes.filter(mode => ["Erwachsene", "Jugend"].includes(mode));
-      if (!state.modes.length) state.modes = ["Erwachsene"];
 
-      if (!Array.isArray(state.outputFormats) || !state.outputFormats.length) state.outputFormats = ["Printmedien"];
+      if (!Array.isArray(state.outputFormats)) state.outputFormats = [];
       state.outputFormats = state.outputFormats.filter(format => ["Printmedien", "SGA App", "WhatsApp"].includes(format));
-      if (!state.outputFormats.length) state.outputFormats = ["Printmedien"];
     }
 
     function includesMode(mode) {
@@ -1053,15 +1067,15 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
 
     function toggleValue(list, value, fallback) {
       const next = list.includes(value) ? list.filter(item => item !== value) : [...list, value];
-      return next.length ? next : [fallback];
+      return next.length ? next : (fallback ? [fallback] : []);
     }
 
     function modeLabel() {
-      return state.modes.join(" + ");
+      return state.modes.length ? state.modes.join(" + ") : "nicht ausgewählt";
     }
 
     function outputLabel() {
-      return state.outputFormats.join(" + ");
+      return state.outputFormats.length ? state.outputFormats.join(" + ") : "nicht ausgewählt";
     }
 
     function usesPrintLength() {
@@ -1228,6 +1242,68 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
       return (isYouthReport && includesMode("Jugend")) || (!isYouthReport && includesMode("Erwachsene"));
     }
 
+    function normalizeMatchText(value) {
+      return String(value || "")
+        .toLowerCase()
+        .replace(/\b(i{1,3}|iv|v)\b/g, match => ({ i: "1", ii: "2", iii: "3", iv: "4", v: "5" }[match] || match))
+        .replace(/u\s*8\s*\+/g, "u8+")
+        .replace(/([dh])\s*(\d{2})/g, "$1$2")
+        .replace(/[^a-z0-9+]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function reportTeamSuffix(report) {
+      const sgaTeam = [report.home, report.guest].find(team => /sg\s*arheilgen/i.test(team || "")) || "";
+      const normalized = normalizeMatchText(sgaTeam);
+      const suffix = normalized.match(/\b([1-5])\b/);
+      return suffix ? suffix[1] : "";
+    }
+
+    function chatReportCandidates(report) {
+      const league = report.league || "";
+      const suffix = reportTeamSuffix(report);
+      const values = new Set([league]);
+      if (suffix) {
+        values.add(`${league} ${suffix}`);
+        values.add(`${league}-${suffix}`);
+      }
+      return [...values].map(normalizeMatchText).filter(value => value.length >= 3);
+    }
+
+    function matchingReportsForChatMessage(text) {
+      const normalized = normalizeMatchText(text);
+      if (!normalized) return [];
+      return state.reports.filter(report => chatReportCandidates(report).some(candidate => {
+        if (!candidate) return false;
+        const pattern = new RegExp(`(^| )${candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}( |$)`);
+        return pattern.test(normalized);
+      }));
+    }
+
+    function enrichChatMessage(message, index) {
+      const text = String(message.text || message).trim();
+      const matches = matchingReportsForChatMessage(text);
+      if (matches.length === 1) {
+        const report = matches[0];
+        const reportIndex = state.reports.indexOf(report);
+        return {
+          id: message.id || `chat-${Date.now()}-${index}`,
+          text,
+          selected: Boolean(report.selected),
+          assignmentStatus: report.selected ? "good" : "unselected",
+          assignmentLabel: `${report.league || "Spielbericht"} · ${report.home || "SGA"} - ${report.guest || "Gegner"}`
+        };
+      }
+      return {
+        id: message.id || `chat-${Date.now()}-${index}`,
+        text,
+        selected: false,
+        assignmentStatus: "unclear",
+        assignmentLabel: matches.length > 1 ? "Mehrere mögliche Mannschaften gefunden" : "Keine eindeutige Mannschaft gefunden"
+      };
+    }
+
     function visibleReports() {
       if (state.teamFilter !== "Passend") return state.reports;
       return state.reports.filter(reportMatchesMode);
@@ -1308,10 +1384,14 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
         ? "Bei Jugendberichten immer nur Vornamen nennen. Keine Nachnamen - weder im Zeitungsartikel noch in der App-News oder im WhatsApp-Post. Bei Jugendlichen sollen Punktgewinne trotzdem klar zuordenbar sein: Nenne bei Einzelsiegen und knappen Einzeln die jeweiligen Vornamen. Wenn Doppelergebnisse erwähnt werden, nenne bei gewonnenen Doppeln mindestens die Vornamen beider Doppelspielerinnen oder Doppelspieler, damit erkennbar ist, wer die Punkte für die SGA geholt hat."
         : isAdultOnly
           ? "Bei Erwachsenen immer Vorname Nachname nennen. Spielernamen nicht fett schreiben. Bei Einzelsiegen und knappen Einzeln die Spielerinnen und Spieler mit Vorname Nachname nennen, besonders wenn sie Punkte für die SGA geholt oder knapp verloren haben. Wenn Doppelergebnisse erwähnt werden, bei gewonnenen Doppeln zwingend mindestens die Nachnamen der Doppelpaarung nennen, zum Beispiel Kaiser/Göttlich, damit klar ist, wer die Punkte für die SGA eingefahren hat."
-          : "Bei Jugendmannschaften immer nur Vornamen nennen. Bei Erwachsenenmannschaften Vorname Nachname nennen. Spielernamen nicht fett schreiben. Punkte für die SGA sollen klar zuordenbar sein: Bei Erwachsenen Einzelsiege und knappe Einzel mit Vorname Nachname nennen; gewonnene Erwachsenendoppel mindestens mit Nachnamen der Doppelpaarung nennen, zum Beispiel Kaiser/Göttlich. Bei Jugendlichen analog arbeiten, aber ausschließlich mit Vornamen - auch bei Einzeln und Doppelpaarungen.";
+          : state.modes.length
+            ? "Bei Jugendmannschaften immer nur Vornamen nennen. Bei Erwachsenenmannschaften Vorname Nachname nennen. Spielernamen nicht fett schreiben. Punkte für die SGA sollen klar zuordenbar sein: Bei Erwachsenen Einzelsiege und knappe Einzel mit Vorname Nachname nennen; gewonnene Erwachsenendoppel mindestens mit Nachnamen der Doppelpaarung nennen, zum Beispiel Kaiser/Göttlich. Bei Jugendlichen analog arbeiten, aber ausschließlich mit Vornamen - auch bei Einzeln und Doppelpaarungen."
+            : "Es wurde noch kein Mannschaftsbereich ausgewählt. Weise den Nutzer darauf hin, dass vor der finalen Ausgabe Erwachsene und/oder Jugend gewählt werden muss.";
       const outputRequest = state.outputFormats.length === 1
         ? `${selectedOutputs[0].request} Gib ausschließlich dieses ausgewählte Ausgabeformat aus.`
-        : `Erstelle getrennte Texte für diese Ausgabeformate: ${outputLabel()}. Nutze klare Überschriften je Ausgabeformat und vermische die Formate nicht.`;
+        : state.outputFormats.length > 1
+          ? `Erstelle getrennte Texte für diese Ausgabeformate: ${outputLabel()}. Nutze klare Überschriften je Ausgabeformat und vermische die Formate nicht.`
+          : "Es wurde noch kein Ausgabeformat ausgewählt. Weise den Nutzer darauf hin, dass vor der finalen Ausgabe ein Format gewählt werden muss.";
       const outputDetails = selectedOutputs.map((output, index) => `${index + 1}. ${output.detail}`).join("\n\n");
       const lengthLine = usesPrintLength()
         ? `Berichtslänge für Printmedien: ${state.reportLength}\n${lengthRules[state.reportLength] || lengthRules["Mittel"]}`
@@ -1392,6 +1472,16 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
       const matchingReports = state.reports.filter(reportMatchesMode).length;
       const mismatchCount = state.reports.length - matchingReports;
       return [
+        {
+          title: state.modes.length ? `Bereich: ${modeLabel()}` : "Kein Mannschaftsbereich ausgewählt",
+          detail: state.modes.length ? "Die Namensregeln werden passend angewendet." : "Bitte Erwachsene und/oder Jugend in Schritt 1 auswählen.",
+          status: state.modes.length ? "good" : "bad"
+        },
+        {
+          title: state.outputFormats.length ? `Ausgabe: ${outputLabel()}` : "Kein Ausgabeformat ausgewählt",
+          detail: state.outputFormats.length ? "Der Prompt wird für die gewählten Kanäle erstellt." : "Bitte Printmedien, SGA App und/oder WhatsApp in Schritt 1 auswählen.",
+          status: state.outputFormats.length ? "good" : "bad"
+        },
         {
           title: loadedReports ? `${loadedReports} Rohdaten-Berichte geladen` : `${selectedReports} Berichte ausgewählt`,
           detail: loadedReports ? "Spielberichtstexte sind in den Rohdaten vorhanden." : "Ausgewählte Berichte vor dem Generieren noch laden.",
@@ -1573,15 +1663,15 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
     }
 
     function setChatMessages(messages) {
-      state.chatMessages = messages.map((message, index) => ({
-        id: message.id || `chat-${Date.now()}-${index}`,
-        text: String(message.text || message).trim(),
-        selected: message.selected !== false
-      })).filter(message => message.text);
+      state.chatMessages = messages
+        .map((message, index) => enrichChatMessage(message, index))
+        .filter(message => message.text);
       state.promptEdited = false;
       render();
       const count = state.chatMessages.length;
-      setChatStatus(count ? `${count} Nachrichten importiert. Bitte auswählen und dann übernehmen.` : "Keine passenden Nachrichten gefunden.", !count);
+      const selected = state.chatMessages.filter(message => message.selected).length;
+      const unclear = state.chatMessages.filter(message => message.assignmentStatus === "unclear").length;
+      setChatStatus(count ? `${count} Nachrichten importiert, ${selected} automatisch ausgewählt, ${unclear} manuell zu prüfen.` : "Keine passenden Nachrichten gefunden.", !count);
     }
 
     function renderChatMessages() {
@@ -1593,10 +1683,11 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
       }
 
       els.chatMessageList.innerHTML = state.chatMessages.map((message, index) => `
-        <label class="report-card">
+        <label class="report-card ${message.assignmentStatus === "good" ? "chat-good" : message.assignmentStatus === "unclear" ? "chat-warn" : "chat-muted"}">
           <input type="checkbox" data-chat-index="${index}" ${message.selected ? "checked" : ""}>
           <span>
             <span class="report-title">Nachricht ${index + 1}</span>
+            <span class="report-meta">${escapeHtml(message.assignmentLabel || "")}</span>
             <span class="report-meta">${escapeHtml(message.text)}</span>
           </span>
         </label>
@@ -1660,7 +1751,7 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
     }
 
     function render() {
-      const progress = Math.round((state.step / totalSteps) * 100);
+      const progress = Math.round(((state.step - 1) / (totalSteps - 1)) * 100);
       const builtPrompt = buildPrompt();
       if (!state.promptEdited) state.promptText = builtPrompt;
       els.progressText.textContent = `${progress}%`;
@@ -2243,7 +2334,7 @@ ${reportToFormattedHtml(text)}
 
     els.modeButtons.forEach(button => {
       button.addEventListener("click", () => {
-        state.modes = toggleValue(state.modes, button.dataset.mode, "Erwachsene");
+        state.modes = toggleValue(state.modes, button.dataset.mode);
         autoSelectReportsForMode();
         state.promptEdited = false;
         render();
@@ -2252,7 +2343,7 @@ ${reportToFormattedHtml(text)}
 
     els.outputFormatButtons.forEach(button => {
       button.addEventListener("click", () => {
-        state.outputFormats = toggleValue(state.outputFormats, button.dataset.outputFormat, "Printmedien");
+        state.outputFormats = toggleValue(state.outputFormats, button.dataset.outputFormat);
         state.promptEdited = false;
         render();
       });
@@ -2399,8 +2490,8 @@ ${reportToFormattedHtml(text)}
     els.resetAll.addEventListener("click", () => {
       Object.assign(state, {
         step: 1,
-        modes: ["Erwachsene"],
-        outputFormats: ["Printmedien"],
+        modes: [],
+        outputFormats: [],
         reportLength: "Mittel",
         sourceUrl: defaultSourceUrl,
         reportFrom: "",
