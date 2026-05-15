@@ -557,6 +557,25 @@
       color: #172033;
     }
 
+    .prompt-preview {
+      min-height: 220px;
+      max-height: 420px;
+      overflow: auto;
+      white-space: pre-wrap;
+      border: 1px solid #bfdbfe;
+      border-radius: 8px;
+      background: #eff6ff;
+      color: #172033;
+      padding: 18px;
+      font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .prompt-preview em {
+      color: #075985;
+      background: #dbeafe;
+      font-style: italic;
+    }
+
     .checks {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -807,7 +826,6 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
             <div class="status" id="previewStatus"></div>
             <div class="preview-list" id="previewList"></div>
           </div>
-          <label class="toggle"><input type="checkbox" id="includeTabellenlage" checked>Tabellensituation erwähnen, falls aus Daten ersichtlich</label>
         </section>
 
         <section class="section" data-section="5">
@@ -857,6 +875,14 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
             </div>
             <div class="status" id="improveStatus"></div>
           </div>
+          <div class="result-box" id="improvedPromptBox">
+            <h3>Verbesserter Prompt</h3>
+            <p>Neue oder veränderte Abschnitte sind kursiv markiert.</p>
+            <div class="prompt-preview" id="improvedPromptOutput"></div>
+            <div class="actions">
+              <button class="btn" id="regenerateReport">Bericht erneut erstellen</button>
+            </div>
+          </div>
           <div class="checklist">
             <h3>✓ Kontrollliste vor Veröffentlichung</h3>
             <div class="checks" id="checks"></div>
@@ -905,14 +931,15 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
       previewFrom: "",
       previewTo: "",
       includePreview: true,
-      includeTabellenlage: true,
       calendarEvents: [],
       calendarStatus: "Kalender wird geladen ...",
       promptText: "",
       promptEdited: false,
       generatedText: "",
       reviewText: "",
-      promptImprovementNotes: ""
+      promptImprovementNotes: "",
+      improvedPromptText: "",
+      previousPromptText: ""
     };
 
     const els = {
@@ -958,7 +985,6 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
       previewStatus: document.querySelector("#previewStatus"),
       previewList: document.querySelector("#previewList"),
       includePreview: document.querySelector("#includePreview"),
-      includeTabellenlage: document.querySelector("#includeTabellenlage"),
       previewFields: document.querySelector("#previewFields"),
       promptOutput: document.querySelector("#promptOutput"),
       outputSummary: document.querySelector("#outputSummary"),
@@ -974,6 +1000,9 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
       promptImprovementNotes: document.querySelector("#promptImprovementNotes"),
       improvePrompt: document.querySelector("#improvePrompt"),
       improveStatus: document.querySelector("#improveStatus"),
+      improvedPromptBox: document.querySelector("#improvedPromptBox"),
+      improvedPromptOutput: document.querySelector("#improvedPromptOutput"),
+      regenerateReport: document.querySelector("#regenerateReport"),
       checks: document.querySelector("#checks"),
       prevStep: document.querySelector("#prevStep"),
       nextStep: document.querySelector("#nextStep"),
@@ -1453,7 +1482,6 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
       els.previewFrom.value = state.previewFrom;
       els.previewTo.value = state.previewTo;
       els.includePreview.checked = state.includePreview;
-      els.includeTabellenlage.checked = state.includeTabellenlage;
     }
 
     async function refreshSession() {
@@ -1681,6 +1709,9 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
       }
       els.reviewReport.disabled = !state.openaiEnabled;
       els.improvePrompt.disabled = !state.openaiEnabled;
+      els.regenerateReport.disabled = !state.openaiEnabled || !state.improvedPromptText.trim();
+      els.improvedPromptBox.style.display = state.improvedPromptText.trim() ? "block" : "none";
+      els.improvedPromptOutput.innerHTML = renderPromptDiffHtml(state.improvedPromptText, state.previousPromptText);
       renderReports();
       renderChatMessages();
       renderPreviewGames();
@@ -1703,6 +1734,25 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
 
     function currentPromptText() {
       return state.promptText || buildPrompt();
+    }
+
+    function lineSet(text) {
+      return new Set(String(text || "")
+        .split("\n")
+        .map(line => line.trim())
+        .filter(Boolean));
+    }
+
+    function renderPromptDiffHtml(current, previous) {
+      const previousLines = lineSet(previous);
+      return String(current || "")
+        .split("\n")
+        .map(line => {
+          if (!line.trim()) return "";
+          const formatted = escapeHtml(line);
+          return previousLines.has(line.trim()) ? formatted : `<em>${formatted}</em>`;
+        })
+        .join("\n");
     }
 
     async function findReports() {
@@ -1905,6 +1955,7 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
       els.generateStatus.classList.remove("error");
       els.generateReport.disabled = true;
       try {
+        state.promptText = els.promptOutput.value || currentPromptText();
         const response = await fetch(`${apiBase}/api/generate`, {
           method: "POST",
           credentials: "include",
@@ -2021,9 +2072,13 @@ ${currentPromptText()}`;
         });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || "Der Prompt konnte nicht verbessert werden.");
-        state.promptText = payload.text || currentPromptText();
+        const oldPrompt = currentPromptText();
+        const newPrompt = payload.text || oldPrompt;
+        state.previousPromptText = oldPrompt;
+        state.improvedPromptText = newPrompt;
+        state.promptText = newPrompt;
         state.promptEdited = true;
-        els.improveStatus.textContent = "Prompt wurde verbessert. Du kannst ihn jetzt prüfen, weiter bearbeiten oder erneut einen Bericht erstellen.";
+        els.improveStatus.textContent = "Prompt wurde verbessert. Der neue Prompt wird unten angezeigt; Veränderungen sind kursiv markiert.";
         render();
       } catch (error) {
         els.improveStatus.textContent = error.message || "Der Prompt konnte nicht verbessert werden.";
@@ -2049,11 +2104,29 @@ ${currentPromptText()}`;
       showToast("Generierter Text kopiert");
     }
 
-    function markdownLineToHtml(line) {
-      const escaped = escapeHtml(line)
+    function inlineFormatting(value) {
+      return escapeHtml(value)
         .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
         .replace(/\*([^*]+)\*/g, "<em>$1</em>");
-      return escaped;
+    }
+
+    function shouldBoldOpeningLabel(line) {
+      const colonIndex = line.indexOf(":");
+      if (colonIndex < 4 || colonIndex > 95) return false;
+      const label = line.slice(0, colonIndex).trim();
+      if (/\*\*/.test(label)) return false;
+      if (!label.includes(" - ")) return false;
+      return /(Damen|Herren|Junior|Juniorinnen|Gemischt|U\d|D\d|H\d|Regionalliga|Südwest|Hessenliga|Verbandsliga|Gruppenliga|Kreisoberliga|Kreisliga|Liga|Klasse)/i.test(label);
+    }
+
+    function markdownLineToHtml(line) {
+      if (shouldBoldOpeningLabel(line)) {
+        const colonIndex = line.indexOf(":");
+        const label = line.slice(0, colonIndex).trim();
+        const rest = line.slice(colonIndex + 1);
+        return `<strong>${inlineFormatting(label)}</strong>:${inlineFormatting(rest)}`;
+      }
+      return inlineFormatting(line);
     }
 
     function reportToFormattedHtml(text) {
@@ -2137,6 +2210,20 @@ ${reportToFormattedHtml(text)}
       link.click();
       URL.revokeObjectURL(url);
       showToast("Word-Datei erstellt");
+    }
+
+    async function regenerateReportFromImprovedPrompt() {
+      if (!state.improvedPromptText.trim()) {
+        els.improveStatus.textContent = "Es gibt noch keinen verbesserten Prompt.";
+        els.improveStatus.classList.add("error");
+        return;
+      }
+      state.promptText = state.improvedPromptText;
+      state.promptEdited = true;
+      if (document.activeElement !== els.promptOutput) {
+        els.promptOutput.value = state.promptText;
+      }
+      await generateReport();
     }
 
     els.loginForm.addEventListener("submit", login);
@@ -2235,7 +2322,6 @@ ${reportToFormattedHtml(text)}
     });
 
     els.includePreview.addEventListener("change", event => setField("includePreview", event.target.checked));
-    els.includeTabellenlage.addEventListener("change", event => setField("includeTabellenlage", event.target.checked));
     els.promptOutput.addEventListener("input", event => {
       state.promptText = event.target.value;
       state.promptEdited = true;
@@ -2284,6 +2370,7 @@ ${reportToFormattedHtml(text)}
     els.generateReport.addEventListener("click", generateReport);
     els.reviewReport.addEventListener("click", reviewGeneratedReport);
     els.improvePrompt.addEventListener("click", improvePromptFromReview);
+    els.regenerateReport.addEventListener("click", regenerateReportFromImprovedPrompt);
     els.copyGenerated.addEventListener("click", copyGenerated);
 
     els.downloadPrompt.addEventListener("click", () => {
@@ -2329,13 +2416,14 @@ ${reportToFormattedHtml(text)}
         previewFrom: "",
         previewTo: "",
         includePreview: true,
-        includeTabellenlage: true,
         calendarStatus: state.calendarStatus,
         promptText: "",
         promptEdited: false,
         generatedText: "",
         reviewText: "",
-        promptImprovementNotes: ""
+        promptImprovementNotes: "",
+        improvedPromptText: "",
+        previousPromptText: ""
       });
       bindStateToInputs();
       render();
