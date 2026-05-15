@@ -13,8 +13,8 @@
       --muted: #64748b;
       --line: #dbe3ed;
       --soft: #edf3f8;
-      --accent: #0f172a;
-      --accent-2: #0f766e;
+      --accent: #075985;
+      --accent-2: #159bd3;
       --warn: #b45309;
       --shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
     }
@@ -118,6 +118,14 @@
       overflow: hidden;
       background: #d4dde8;
       border-radius: 999px;
+    }
+
+    .header-reset {
+      width: 100%;
+      margin-top: 14px;
+      border-color: #b7cad8;
+      background: #fff;
+      color: var(--accent);
     }
 
     .bar span {
@@ -392,13 +400,28 @@
       padding: 12px;
     }
 
+    .quality-item.good {
+      border-color: #86efac;
+      background: #ecfdf5;
+    }
+
+    .quality-item.warn {
+      border-color: #fde68a;
+      background: #fffbeb;
+    }
+
+    .quality-item.bad {
+      border-color: #fecaca;
+      background: #fef2f2;
+    }
+
     .quality-item strong {
       display: block;
       margin-bottom: 3px;
     }
 
     .quality-item span {
-      color: var(--muted);
+      color: #334155;
       font-size: 13px;
     }
 
@@ -523,9 +546,9 @@
 
     .prompt {
       min-height: 360px;
-      background: #08111f;
+      background: #083d63;
       color: #f8fafc;
-      border-color: #08111f;
+      border-color: #083d63;
     }
 
     .report-editor {
@@ -636,11 +659,12 @@
 <body>
   <div class="login-screen" id="loginScreen" aria-live="polite">
     <form class="login-card" id="loginForm">
-      <h2>Geschützter Zugang</h2>
-      <p>Bitte gib das Passwort ein, um den Spieltagsbericht-Assistenten zu nutzen.</p>
+      <h2>Bericht generieren</h2>
+      <p>Die App ist frei nutzbar. Nur die OpenAI-Funktion zum Erstellen, Prüfen oder Verbessern eines Berichts benötigt das Passwort.</p>
       <label class="field"><span>Passwort</span><input type="password" id="passwordInput" autocomplete="current-password"></label>
       <div class="actions">
         <button class="btn" type="submit" id="loginButton">Einloggen</button>
+        <button class="btn secondary" type="button" id="closeLogin">Abbrechen</button>
       </div>
       <div class="status error" id="loginStatus"></div>
     </form>
@@ -656,8 +680,9 @@
       </div>
       <div class="progress" aria-label="Fortschritt">
         <small>Fortschritt</small>
-        <strong id="progressText">20%</strong>
+        <strong id="progressText">17%</strong>
         <div class="bar"><span id="progressBar"></span></div>
+        <button class="btn secondary header-reset" id="resetAll">↻ Von vorne starten</button>
       </div>
     </header>
 
@@ -667,7 +692,8 @@
         <button class="step-button" data-step="2"><span class="icon">📄</span><span>2. Spielberichte sammeln</span></button>
         <button class="step-button" data-step="3"><span class="icon">✨</span><span>3. Zusatzinfos</span></button>
         <button class="step-button" data-step="4"><span class="icon">📱</span><span>4. Spieltagsvorschau</span></button>
-        <button class="step-button" data-step="5"><span class="icon">📋</span><span>5. Prompt oder Bericht erstellen</span></button>
+        <button class="step-button" data-step="5"><span class="icon">📋</span><span>5. Prompt erstellen</span></button>
+        <button class="step-button" data-step="6"><span class="icon">🔐</span><span>6. Bericht erstellen</span></button>
       </nav>
 
       <main class="panel">
@@ -785,8 +811,8 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
         </section>
 
         <section class="section" data-section="5">
-          <h2>5. Prompt oder Bericht erstellen</h2>
-          <p>Bearbeite den Prompt oder den generierten Bericht direkt in der Anwendung und kopiere oder exportiere anschließend die finale Fassung.</p>
+          <h2>5. Prompt erstellen</h2>
+          <p>Prüfe den automatisch erzeugten Master-Prompt, passe ihn bei Bedarf an und kopiere oder speichere ihn.</p>
           <div class="inline-summary" id="outputSummary"></div>
           <div class="infobox">
             <strong>✓ Rohdaten-Qualitätscheck</strong>
@@ -795,18 +821,29 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
           <div class="actions">
             <button class="btn" id="copyPrompt">📋 Prompt kopieren</button>
             <button class="btn secondary" id="resetPrompt">Prompt aus Eingaben neu laden</button>
-            <button class="btn" id="generateReport">Bericht mit OpenAI erstellen</button>
-            <button class="btn secondary" id="reviewReport">Bericht prüfen</button>
             <button class="btn secondary" id="downloadPrompt">⬇ Prompt als TXT speichern</button>
-            <button class="btn secondary" id="resetAll">↻ Zurücksetzen</button>
           </div>
           <label class="field"><span>Master-Prompt bearbeiten</span><textarea class="editor prompt" id="promptOutput" rows="18"></textarea></label>
+        </section>
+
+        <section class="section" data-section="6">
+          <h2>6. Bericht erstellen</h2>
+          <p>Dieser Bereich ist passwortgeschützt, weil hier OpenAI genutzt wird. Nach Eingabe des Passworts kannst du den Bericht generieren, prüfen, verbessern und exportieren.</p>
+          <div class="infobox">
+            <strong>✓ Geschützter Bereich</strong>
+            <p>Das Passwort wird erst abgefragt, wenn du eine OpenAI-Funktion nutzt. Der fertige Text kann anschließend direkt bearbeitet und exportiert werden.</p>
+          </div>
+          <div class="actions">
+            <button class="btn" id="generateReport">Bericht mit OpenAI erstellen</button>
+            <button class="btn secondary" id="reviewReport">Bericht prüfen</button>
+          </div>
           <div class="result-box">
             <h3>Generierten Bericht bearbeiten</h3>
             <div class="status" id="generateStatus"></div>
             <div class="actions">
               <button class="btn secondary" id="copyGenerated">Generierten Text kopieren</button>
               <button class="btn secondary" id="downloadGenerated">Bericht als TXT speichern</button>
+              <button class="btn secondary" id="downloadFormatted">Bericht als Word/Google Docs-Datei speichern</button>
             </div>
             <textarea class="editor report-editor" id="generatedOutput" rows="14" placeholder="Noch kein Bericht generiert."></textarea>
           </div>
@@ -814,6 +851,11 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
             <h3>Prüfung des Berichts</h3>
             <div class="status" id="reviewStatus"></div>
             <textarea class="editor report-editor" id="reviewOutput" rows="8" placeholder="Noch keine Prüfung durchgeführt."></textarea>
+            <label class="field"><span>Eigene Hinweise zur Prompt-Verbesserung</span><textarea id="promptImprovementNotes" rows="5" placeholder="Optional: Was soll zusätzlich im Prompt verbessert oder anders gewichtet werden?"></textarea></label>
+            <div class="actions">
+              <button class="btn" id="improvePrompt">Prompt mit Prüfergebnis verbessern</button>
+            </div>
+            <div class="status" id="improveStatus"></div>
           </div>
           <div class="checklist">
             <h3>✓ Kontrollliste vor Veröffentlichung</h3>
@@ -833,7 +875,7 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
 
   <script>
     const storageKey = "sga-spieltagsbericht-assistent-v1";
-    const totalSteps = 5;
+    const totalSteps = 6;
     const defaultPreviewLink = "https://htv.liga.nu/cgi-bin/WebObjects/nuLigaTENDE.woa/wa/clubMeetings";
     const defaultSourceUrl = "https://htv.liga.nu/cgi-bin/WebObjects/nuLigaTENDE.woa/4/wa/clubMeetings?club=24783";
     const calendarFile = "data/SGA%20Medenspielkalender%202026.ics";
@@ -843,6 +885,8 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
       step: 1,
       authenticated: false,
       passwordRequired: false,
+      authPromptVisible: false,
+      generateAfterLogin: "",
       openaiEnabled: false,
       modes: ["Erwachsene"],
       outputFormats: ["Printmedien"],
@@ -867,13 +911,15 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
       promptText: "",
       promptEdited: false,
       generatedText: "",
-      reviewText: ""
+      reviewText: "",
+      promptImprovementNotes: ""
     };
 
     const els = {
       loginScreen: document.querySelector("#loginScreen"),
       loginForm: document.querySelector("#loginForm"),
       loginButton: document.querySelector("#loginButton"),
+      closeLogin: document.querySelector("#closeLogin"),
       passwordInput: document.querySelector("#passwordInput"),
       loginStatus: document.querySelector("#loginStatus"),
       progressText: document.querySelector("#progressText"),
@@ -921,9 +967,13 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
       generateStatus: document.querySelector("#generateStatus"),
       generatedOutput: document.querySelector("#generatedOutput"),
       copyGenerated: document.querySelector("#copyGenerated"),
+      downloadFormatted: document.querySelector("#downloadFormatted"),
       reviewReport: document.querySelector("#reviewReport"),
       reviewStatus: document.querySelector("#reviewStatus"),
       reviewOutput: document.querySelector("#reviewOutput"),
+      promptImprovementNotes: document.querySelector("#promptImprovementNotes"),
+      improvePrompt: document.querySelector("#improvePrompt"),
+      improveStatus: document.querySelector("#improveStatus"),
       checks: document.querySelector("#checks"),
       prevStep: document.querySelector("#prevStep"),
       nextStep: document.querySelector("#nextStep"),
@@ -950,7 +1000,7 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
     }
 
     function save() {
-      const { step, authenticated, passwordRequired, openaiEnabled, calendarEvents, calendarStatus, ...payload } = state;
+      const { step, authenticated, passwordRequired, authPromptVisible, generateAfterLogin, openaiEnabled, calendarEvents, calendarStatus, ...payload } = state;
       localStorage.setItem(storageKey, JSON.stringify(payload));
     }
 
@@ -1226,10 +1276,10 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
         "Ausführlich": "Schreibe ausführlicher und erwähne mehr Mannschaften, Spielverläufe, Tabellenlagen, Match-Tie-Breaks und Besonderheiten, sofern die Rohdaten das hergeben."
       };
       const nameRule = isYouthOnly
-        ? "Bei Jugendberichten immer nur Vornamen nennen. Keine Nachnamen - weder im Zeitungsartikel noch in der App-News oder im WhatsApp-Post."
+        ? "Bei Jugendberichten immer nur Vornamen nennen. Keine Nachnamen - weder im Zeitungsartikel noch in der App-News oder im WhatsApp-Post. Bei Jugendlichen sollen Punktgewinne trotzdem klar zuordenbar sein: Nenne bei Einzelsiegen und knappen Einzeln die jeweiligen Vornamen. Wenn Doppelergebnisse erwähnt werden, nenne bei gewonnenen Doppeln mindestens die Vornamen beider Doppelspielerinnen oder Doppelspieler, damit erkennbar ist, wer die Punkte für die SGA geholt hat."
         : isAdultOnly
-          ? "Bei Erwachsenen immer Vorname Nachname nennen. Spielernamen nicht fett schreiben."
-          : "Bei Jugendmannschaften immer nur Vornamen nennen. Bei Erwachsenenmannschaften Vorname Nachname nennen. Spielernamen nicht fett schreiben.";
+          ? "Bei Erwachsenen immer Vorname Nachname nennen. Spielernamen nicht fett schreiben. Bei Einzelsiegen und knappen Einzeln die Spielerinnen und Spieler mit Vorname Nachname nennen, besonders wenn sie Punkte für die SGA geholt oder knapp verloren haben. Wenn Doppelergebnisse erwähnt werden, bei gewonnenen Doppeln zwingend mindestens die Nachnamen der Doppelpaarung nennen, zum Beispiel Kaiser/Göttlich, damit klar ist, wer die Punkte für die SGA eingefahren hat."
+          : "Bei Jugendmannschaften immer nur Vornamen nennen. Bei Erwachsenenmannschaften Vorname Nachname nennen. Spielernamen nicht fett schreiben. Punkte für die SGA sollen klar zuordenbar sein: Bei Erwachsenen Einzelsiege und knappe Einzel mit Vorname Nachname nennen; gewonnene Erwachsenendoppel mindestens mit Nachnamen der Doppelpaarung nennen, zum Beispiel Kaiser/Göttlich. Bei Jugendlichen analog arbeiten, aber ausschließlich mit Vornamen - auch bei Einzeln und Doppelpaarungen.";
       const outputRequest = state.outputFormats.length === 1
         ? `${selectedOutputs[0].request} Gib ausschließlich dieses ausgewählte Ausgabeformat aus.`
         : `Erstelle getrennte Texte für diese Ausgabeformate: ${outputLabel()}. Nutze klare Überschriften je Ausgabeformat und vermische die Formate nicht.`;
@@ -1260,6 +1310,7 @@ Allgemeine Regeln:
 - Erwähne die Tabellensituation, sofern sie aus den Daten hervorgeht, zum Beispiel Aufstiegskampf, Klassenerhalt oder Bedeutung des Sieges.
 - Hebe Siege gegen Spielerinnen oder Spieler mit deutlich besserer LK hervor.
 - Betone knappe Ergebnisse, Match-Tie-Breaks, gedrehte Spiele, entscheidende Doppel oder kuriose Spielverläufe.
+- Punkte für die SGA müssen nachvollziehbar bleiben: Nenne bei Einzelsiegen und knappen Einzeln die passenden Namen gemäß Namensregel. Wenn du gewonnene Doppel erwähnst, nenne die siegreiche Doppelpaarung gemäß Namensregel.
 - Bei klaren Matches müssen nicht alle Satzergebnisse genannt werden.
 - Satzergebnisse nur nennen, wenn sie für Spannung, Dramatik oder Besonderheit relevant sind.
 - Berücksichtige die Zusatztexte der Mannschaften und baue passende Elemente sinnvoll in den Text ein.
@@ -1268,6 +1319,7 @@ Allgemeine Regeln:
 Kontrolle vor Ausgabe:
 - Stimmen Mannschaften, Ligen und Ergebnisse?
 - Stimmen die Namen? Bei Screenshots besonders sorgfältig prüfen.
+- Ist erkennbar, wer die Punkte für die SGA im Einzel und im Doppel geholt hat?
 - Passt der Tonfall zu den gewählten Ausgabeformaten ${outputLabel()}?
 - Sind die Termine und Uhrzeiten der Vorschau korrekt?
 ${includesMode("Jugend") ? "- Sind wirklich alle Nachnamen bei Jugendlichen entfernt?" : ""}
@@ -1289,6 +1341,7 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
       const items = [
         "Stimmen Mannschaften, Ligen und Ergebnisse?",
         "Sind die Namen korrekt?",
+        "Ist erkennbar, wer die Punkte für die SGA im Einzel und Doppel geholt hat?",
         "Ist nur Mannschaft und Liga fett geschrieben?",
         "Sind die Spielklassen korrekt sortiert?",
         "Sind knappe Matches und Match-Tie-Breaks erwähnt?",
@@ -1313,7 +1366,7 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
         {
           title: loadedReports ? `${loadedReports} Rohdaten-Berichte geladen` : `${selectedReports} Berichte ausgewählt`,
           detail: loadedReports ? "Spielberichtstexte sind in den Rohdaten vorhanden." : "Ausgewählte Berichte vor dem Generieren noch laden.",
-          status: loadedReports ? "good" : selectedReports ? "warn" : "warn"
+          status: loadedReports ? "good" : selectedReports ? "warn" : "bad"
         },
         {
           title: state.teamNotes.trim() ? "Zusatzinfos vorhanden" : "Keine Zusatzinfos eingetragen",
@@ -1323,7 +1376,7 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
         {
           title: state.includePreview ? `${previewCount} Vorschau-Termine` : "Vorschau deaktiviert",
           detail: state.includePreview ? "Diese Termine werden in den Prompt übernommen." : "Der Bericht wird ohne Vorschau erstellt.",
-          status: !state.includePreview || previewCount ? "good" : "warn"
+          status: !state.includePreview || previewCount ? "good" : "bad"
         },
         {
           title: mismatchCount ? `${mismatchCount} Berichte passen evtl. nicht zu ${modeLabel()}` : `Bereich ${modeLabel()} plausibel`,
@@ -1342,8 +1395,8 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
       ].join("");
 
       els.qualityCheck.innerHTML = qualityItems().map(item => `
-        <div class="quality-item">
-          <strong>${item.status === "good" ? "✓" : "!"} ${escapeHtml(item.title)}</strong>
+        <div class="quality-item ${escapeHtml(item.status)}">
+          <strong>${item.status === "good" ? "✓" : item.status === "bad" ? "×" : "!"} ${escapeHtml(item.title)}</strong>
           <span>${escapeHtml(item.detail)}</span>
         </div>
       `).join("");
@@ -1396,6 +1449,7 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
       els.copiedData.value = state.copiedData;
       els.teamNotes.value = state.teamNotes;
       els.chatRawText.value = state.chatRawText;
+      els.promptImprovementNotes.value = state.promptImprovementNotes;
       els.previewFrom.value = state.previewFrom;
       els.previewTo.value = state.previewTo;
       els.includePreview.checked = state.includePreview;
@@ -1418,7 +1472,7 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
     }
 
     function renderAuth() {
-      const showLogin = state.passwordRequired && !state.authenticated;
+      const showLogin = state.authPromptVisible && state.passwordRequired && !state.authenticated;
       els.loginScreen.classList.toggle("show", showLogin);
       if (showLogin) window.setTimeout(() => els.passwordInput.focus(), 0);
     }
@@ -1626,6 +1680,7 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
         els.generateStatus.classList.remove("error");
       }
       els.reviewReport.disabled = !state.openaiEnabled;
+      els.improvePrompt.disabled = !state.openaiEnabled;
       renderReports();
       renderChatMessages();
       renderPreviewGames();
@@ -1815,6 +1870,15 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
         if (!response.ok) throw new Error(payload.error || "Anmeldung fehlgeschlagen.");
         els.passwordInput.value = "";
         await refreshSession();
+        state.authPromptVisible = false;
+        renderAuth();
+        if (state.generateAfterLogin) {
+          const nextAction = state.generateAfterLogin;
+          state.generateAfterLogin = "";
+          if (nextAction === "generate") await generateReport();
+          if (nextAction === "review") await reviewGeneratedReport();
+          if (nextAction === "improve") await improvePromptFromReview();
+        }
       } catch (error) {
         els.loginStatus.textContent = error.message || "Anmeldung fehlgeschlagen.";
       } finally {
@@ -1822,7 +1886,21 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
       }
     }
 
+    function requestGeneratePassword(nextAction = "") {
+      if (!state.passwordRequired || state.authenticated) return true;
+      state.generateAfterLogin = nextAction;
+      state.authPromptVisible = true;
+      els.loginStatus.textContent = "";
+      renderAuth();
+      return false;
+    }
+
     async function generateReport() {
+      if (!requestGeneratePassword("generate")) {
+        els.generateStatus.textContent = "Bitte Passwort eingeben, um den Bericht zu generieren.";
+        els.generateStatus.classList.remove("error");
+        return;
+      }
       els.generateStatus.textContent = "Bericht wird erstellt ...";
       els.generateStatus.classList.remove("error");
       els.generateReport.disabled = true;
@@ -1847,6 +1925,11 @@ ${previewText || "[Keine Spiele für den gewählten Zeitraum ausgewählt oder ge
     }
 
     async function reviewGeneratedReport() {
+      if (!requestGeneratePassword("review")) {
+        els.reviewStatus.textContent = "Bitte Passwort eingeben, um den Bericht zu prüfen.";
+        els.reviewStatus.classList.remove("error");
+        return;
+      }
       const report = (els.generatedOutput.value || state.generatedText || "").trim();
       if (!report) {
         els.reviewStatus.textContent = "Bitte zuerst einen Bericht generieren oder einfügen.";
@@ -1893,6 +1976,63 @@ ${report}`;
       }
     }
 
+    async function improvePromptFromReview() {
+      if (!requestGeneratePassword("improve")) {
+        els.improveStatus.textContent = "Bitte Passwort eingeben, um den Prompt mit OpenAI zu verbessern.";
+        els.improveStatus.classList.remove("error");
+        return;
+      }
+      const review = (els.reviewOutput.value || state.reviewText || "").trim();
+      const manualNotes = (els.promptImprovementNotes.value || state.promptImprovementNotes || "").trim();
+      if (!review && !manualNotes) {
+        els.improveStatus.textContent = "Bitte zuerst den Bericht prüfen oder eigene Hinweise eintragen.";
+        els.improveStatus.classList.add("error");
+        return;
+      }
+
+      els.improveStatus.textContent = "Prompt wird verbessert ...";
+      els.improveStatus.classList.remove("error");
+      els.improvePrompt.disabled = true;
+
+      try {
+        const improvePrompt = `Überarbeite den folgenden Master-Prompt für den SGA-Spieltagsbericht-Assistenten.
+
+Ziel:
+- Nutze die Prüfergebnisse und optionalen Nutzerhinweise, um den Prompt präziser zu machen.
+- Bewahre alle bestehenden Rohdaten, Links, Spielberichte, Zusatzinfos und Kalenderdaten vollständig.
+- Entferne keine Fakten.
+- Formuliere nur den Master-Prompt verbessert neu.
+- Gib ausschließlich den verbesserten Master-Prompt aus, keine Erklärung davor oder danach.
+
+Prüfergebnisse:
+${review || "[Keine Prüfergebnisse vorhanden]"}
+
+Zusätzliche Nutzerhinweise:
+${manualNotes || "[Keine zusätzlichen Hinweise]"}
+
+Aktueller Master-Prompt:
+${currentPromptText()}`;
+
+        const response = await fetch(`${apiBase}/api/generate`, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: improvePrompt })
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || "Der Prompt konnte nicht verbessert werden.");
+        state.promptText = payload.text || currentPromptText();
+        state.promptEdited = true;
+        els.improveStatus.textContent = "Prompt wurde verbessert. Du kannst ihn jetzt prüfen, weiter bearbeiten oder erneut einen Bericht erstellen.";
+        render();
+      } catch (error) {
+        els.improveStatus.textContent = error.message || "Der Prompt konnte nicht verbessert werden.";
+        els.improveStatus.classList.add("error");
+      } finally {
+        els.improvePrompt.disabled = !state.openaiEnabled;
+      }
+    }
+
     async function copyGenerated() {
       const text = els.generatedOutput.value || state.generatedText;
       if (!text.trim()) return;
@@ -1909,7 +2049,104 @@ ${report}`;
       showToast("Generierter Text kopiert");
     }
 
+    function markdownLineToHtml(line) {
+      const escaped = escapeHtml(line)
+        .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+        .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+      return escaped;
+    }
+
+    function reportToFormattedHtml(text) {
+      const lines = String(text || "").replace(/\r/g, "").split("\n");
+      const html = [];
+      let listOpen = false;
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line) {
+          if (listOpen) {
+            html.push("</ul>");
+            listOpen = false;
+          }
+          continue;
+        }
+
+        const heading = line.match(/^(#{1,3})\s+(.+)$/);
+        if (heading) {
+          if (listOpen) {
+            html.push("</ul>");
+            listOpen = false;
+          }
+          const level = Math.min(heading[1].length + 1, 4);
+          html.push(`<h${level}>${markdownLineToHtml(heading[2])}</h${level}>`);
+          continue;
+        }
+
+        const bullet = line.match(/^[-*]\s+(.+)$/);
+        if (bullet) {
+          if (!listOpen) {
+            html.push("<ul>");
+            listOpen = true;
+          }
+          html.push(`<li>${markdownLineToHtml(bullet[1])}</li>`);
+          continue;
+        }
+
+        if (listOpen) {
+          html.push("</ul>");
+          listOpen = false;
+        }
+        html.push(`<p>${markdownLineToHtml(line)}</p>`);
+      }
+
+      if (listOpen) html.push("</ul>");
+      return html.join("\n");
+    }
+
+    function downloadFormattedReport() {
+      const text = (els.generatedOutput.value || state.generatedText || "").trim();
+      if (!text) {
+        els.generateStatus.textContent = "Bitte zuerst einen Bericht generieren oder einfügen.";
+        els.generateStatus.classList.add("error");
+        return;
+      }
+
+      const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SGA Spieltagsbericht</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.45; color: #111827; }
+    h1, h2, h3, h4 { color: #075985; margin: 16pt 0 6pt; }
+    p { margin: 0 0 8pt; }
+    ul { margin: 0 0 8pt 18pt; padding: 0; }
+    strong { font-weight: 700; }
+  </style>
+</head>
+<body>
+${reportToFormattedHtml(text)}
+</body>
+</html>`;
+
+      const blob = new Blob([html], { type: "application/msword;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = exportFileName("Bericht-formatiert").replace(/\.txt$/i, ".doc");
+      link.click();
+      URL.revokeObjectURL(url);
+      showToast("Word-Datei erstellt");
+    }
+
     els.loginForm.addEventListener("submit", login);
+    els.closeLogin.addEventListener("click", () => {
+      state.authPromptVisible = false;
+      state.generateAfterLogin = "";
+      els.passwordInput.value = "";
+      els.loginStatus.textContent = "";
+      renderAuth();
+    });
     els.stepButtons.forEach(button => {
       button.addEventListener("click", () => {
         state.step = Number(button.dataset.step);
@@ -1959,6 +2196,10 @@ ${report}`;
 
     ["sourceUrl", "reportFrom", "reportTo", "links", "copiedData", "teamNotes", "chatRawText", "previewFrom", "previewTo"].forEach(name => {
       els[name].addEventListener("input", event => setField(name, event.target.value));
+    });
+    els.promptImprovementNotes.addEventListener("input", event => {
+      state.promptImprovementNotes = event.target.value;
+      save();
     });
 
     els.findReports.addEventListener("click", findReports);
@@ -2042,6 +2283,7 @@ ${report}`;
 
     els.generateReport.addEventListener("click", generateReport);
     els.reviewReport.addEventListener("click", reviewGeneratedReport);
+    els.improvePrompt.addEventListener("click", improvePromptFromReview);
     els.copyGenerated.addEventListener("click", copyGenerated);
 
     els.downloadPrompt.addEventListener("click", () => {
@@ -2064,6 +2306,8 @@ ${report}`;
       link.click();
       URL.revokeObjectURL(url);
     });
+
+    els.downloadFormatted.addEventListener("click", downloadFormattedReport);
 
     els.resetAll.addEventListener("click", () => {
       Object.assign(state, {
@@ -2090,7 +2334,8 @@ ${report}`;
         promptText: "",
         promptEdited: false,
         generatedText: "",
-        reviewText: ""
+        reviewText: "",
+        promptImprovementNotes: ""
       });
       bindStateToInputs();
       render();
