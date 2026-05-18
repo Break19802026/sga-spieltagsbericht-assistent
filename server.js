@@ -564,6 +564,8 @@ async function handleGenerate(req, res) {
     const instructions = [
       "Du bist der digitale Pressesprecher der SG Arheilgen Tennis.",
       "Erstelle verlässliche, veröffentlichungsreife Texte aus den bereitgestellten nuLiga-Rohdaten.",
+      "Orientiere dich am festen SGA-Artikelaufbau der Referenztexte: prägnante Überschrift, kurzer Lead, danach pro Mannschaft ein flüssiger Absatz mit fett gesetztem Mannschaft-Liga-Einstieg.",
+      "Schreibe Vorschauen für Erwachsene und Jugendliche immer als Fließtext im Stil der Referenzartikel, nicht als Liste.",
       "Erfinde keine Ergebnisse, Namen, Tabellenlagen oder Termine.",
       "Wenn Informationen fehlen oder unsicher sind, kennzeichne sie kurz zur Prüfung.",
       examples ? `Nutze diese bisherigen Berichte nur als Stilreferenz, nicht als aktuelle Fakten:\n\n${examples}` : ""
@@ -659,10 +661,10 @@ const server = http.createServer((req, res) => {
   if (req.method === "GET" && url.pathname === "/api/session") return handleSession(req, res);
   if (req.method === "POST" && url.pathname === "/api/login") return handleLogin(req, res);
   if (req.method === "POST" && url.pathname === "/api/logout") return handleLogout(req, res);
-  if (url.pathname.startsWith("/api/") && !requireAuth(req, res)) return;
   if (req.method === "GET" && url.pathname === "/api/reports") return handleDiscover(req, res, url);
   if (req.method === "POST" && url.pathname === "/api/app-chat") return handleAppChat(req, res);
   if (req.method === "POST" && url.pathname === "/api/download") return handleDownload(req, res);
+  if (req.method === "POST" && url.pathname === "/api/generate" && !requireAuth(req, res)) return;
   if (req.method === "POST" && url.pathname === "/api/generate") return handleGenerate(req, res);
   if (req.method === "GET") return serveStatic(req, res, url);
   send(res, 405, { error: "Methode nicht unterstützt. Bitte prüfen, ob der lokale Server mit der aktuellen Version neu gestartet wurde." });
