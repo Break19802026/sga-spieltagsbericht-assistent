@@ -1349,7 +1349,8 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
 - Beispiel: **Damen 30 - Hessenliga**: Die Damen 30 feierten einen knappen 5:4-Heimsieg ...
 - Nur Mannschaft und Liga werden fett geschrieben. Der Doppelpunkt und der weitere Text werden nicht fett geschrieben.
 - In der finalen Ausgabe sollen keine sichtbaren Markdown-Sternchen stehen. Wenn das Ausgabemedium Fettformatierung unterstützt, formatiere Mannschaft und Liga wirklich fett.
-- Vorschau-Überschrift kurz formulieren, zum Beispiel "Vorschau (15.-17. Mai)".
+- Schreibe auch die Vorschau immer als Fließtext. Keine Listenform und keine stichpunktartige Aufzählung.
+- Vorschau-Überschrift kurz formulieren, zum Beispiel "Vorschau".
 - Zeitungston: sachlich genug, aber nicht trocken.`
         },
         "SGA App": {
@@ -1399,7 +1400,7 @@ Herren 50 II: Nach 3:3 in den Einzeln wurden alle drei Doppel gewonnen."></texta
 
       const previewText = previewGamesText();
       const previewRule = state.includePreview
-        ? `Am Ende eine kurze Vorschau aus dem SGA-Medenspielkalender 2026 einbauen. Für die Vorschau nur Spiele im Zeitraum ${state.previewFrom || "[Startdatum eintragen]"} bis ${state.previewTo || "[Enddatum eintragen]"} berücksichtigen. Heimspiele am Woogsweg besonders hervorheben. ${previewText ? "Nutze ausschließlich die unten aufgeführten Kalendertermine." : "Wenn keine Kalendertermine unten aufgeführt sind, keine Termine erfinden."}`
+        ? `Am Ende eine kurze Vorschau aus dem SGA-Medenspielkalender 2026 einbauen. Für die Vorschau nur Spiele im Zeitraum ${state.previewFrom || "[Startdatum eintragen]"} bis ${state.previewTo || "[Enddatum eintragen]"} berücksichtigen. Die Vorschau immer als Fließtext schreiben, egal ob Erwachsene oder Jugend ausgewählt ist. Orientiere dich am Aufbau der Referenzartikel: kurze Überschrift "Vorschau", danach ein zusammenhängender Absatz mit Datum, Uhrzeit, Heim-/Auswärtsspielen, Woogsweg-Heimspielen und sportlichen Highlights. Keine Listenform. Heimspiele am Woogsweg besonders hervorheben. ${previewText ? "Nutze ausschließlich die unten aufgeführten Kalendertermine." : "Wenn keine Kalendertermine unten aufgeführt sind, keine Termine erfinden."}`
         : "Keine Vorschau erstellen, falls keine Vorschau-Daten vorhanden sind.";
 
       return `Du fungierst als digitaler Pressesprecher der SG Arheilgen Tennis. Erstelle basierend auf den beigefügten Rohdaten aus nuLiga, Screenshots, kopierten Tabellen und Zusatzinformationen der Mannschaften einen Spieltagsbericht nach dem festen SGA-Schema.
@@ -1416,6 +1417,7 @@ ${lengthLine}
 
 Allgemeine Regeln:
 - ${nameRule}
+- Schreibe den gesamten Bericht im Stil der SGA-Referenzartikel: Bild-/Kontextzeile falls vorhanden, prägnante Überschrift, kurzer Lead, danach pro Mannschaft ein flüssiger Absatz. Keine sichtbaren Gliederungsüberschriften wie Regionale Ebene, Landesebene oder Kreisebene.
 - Erwähne die Tabellensituation, sofern sie aus den Daten hervorgeht, zum Beispiel Aufstiegskampf, Klassenerhalt oder Bedeutung des Sieges.
 - Hebe Siege gegen Spielerinnen oder Spieler mit deutlich besserer LK hervor.
 - Betone knappe Ergebnisse, Match-Tie-Breaks, gedrehte Spiele, entscheidende Doppel oder kuriose Spielverläufe.
@@ -2220,10 +2222,28 @@ ${currentPromptText()}`;
       return inlineFormatting(line);
     }
 
+    function looksLikeReportTitle(line) {
+      const plain = String(line || "").replace(/\*\*/g, "").replace(/\*/g, "").trim();
+      if (!plain || plain.length > 150) return false;
+      if (/[:.!?]$/.test(plain)) return false;
+      if (/^(Vorschau|Ausblick|Fazit)\b/i.test(line)) return false;
+      if (shouldBoldOpeningLabel(line)) return false;
+      return /(SGA|SG Arheilgen|Tennis|Medenrunde|Teams|Jugend|Aktive|Senioren|Saison|Auftakt|Auftritte)/i.test(plain);
+    }
+
+    function looksLikeSectionHeading(line) {
+      if (!line || line.length > 95) return false;
+      if (shouldBoldOpeningLabel(line)) return false;
+      return /^(Vorschau|Ausblick|Fazit)(\b|:)/i.test(line);
+    }
+
     function reportToFormattedHtml(text) {
       const lines = String(text || "").replace(/\r/g, "").split("\n");
       const html = [];
       let listOpen = false;
+      let firstContentSeen = false;
+      let titleSeen = false;
+      let contentCount = 0;
 
       for (const rawLine of lines) {
         const line = rawLine.trim();
@@ -2243,6 +2263,9 @@ ${currentPromptText()}`;
           }
           const level = Math.min(heading[1].length + 1, 4);
           html.push(`<h${level}>${markdownLineToHtml(heading[2])}</h${level}>`);
+          firstContentSeen = true;
+          titleSeen = titleSeen || level === 1;
+          contentCount += 1;
           continue;
         }
 
@@ -2253,6 +2276,8 @@ ${currentPromptText()}`;
             listOpen = true;
           }
           html.push(`<li>${markdownLineToHtml(bullet[1])}</li>`);
+          firstContentSeen = true;
+          contentCount += 1;
           continue;
         }
 
@@ -2260,7 +2285,22 @@ ${currentPromptText()}`;
           html.push("</ul>");
           listOpen = false;
         }
+        if (!titleSeen && contentCount <= 2 && looksLikeReportTitle(line)) {
+          html.push(`<h1>${markdownLineToHtml(line)}</h1>`);
+          firstContentSeen = true;
+          titleSeen = true;
+          contentCount += 1;
+          continue;
+        }
+        if (looksLikeSectionHeading(line)) {
+          html.push(`<h2>${markdownLineToHtml(line.replace(/:\s*$/, ""))}</h2>`);
+          firstContentSeen = true;
+          contentCount += 1;
+          continue;
+        }
         html.push(`<p>${markdownLineToHtml(line)}</p>`);
+        firstContentSeen = true;
+        contentCount += 1;
       }
 
       if (listOpen) html.push("</ul>");
@@ -2281,11 +2321,14 @@ ${currentPromptText()}`;
   <meta charset="utf-8">
   <title>SGA Spieltagsbericht</title>
   <style>
-    body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.45; color: #111827; }
-    h1, h2, h3, h4 { color: #075985; margin: 16pt 0 6pt; }
+    @page { margin: 2cm; }
+    body { font-family: Aptos, Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.35; color: #111111; }
+    h1 { font-size: 14pt; line-height: 1.25; color: #111111; margin: 0 0 10pt; font-weight: 700; }
+    h2, h3, h4 { font-size: 11pt; line-height: 1.25; color: #111111; margin: 10pt 0 4pt; font-weight: 700; }
     p { margin: 0 0 8pt; }
     ul { margin: 0 0 8pt 18pt; padding: 0; }
     strong { font-weight: 700; }
+    em { font-style: italic; }
   </style>
 </head>
 <body>
