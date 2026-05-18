@@ -1,7 +1,9 @@
-Stilreferenz: SG Arheilgen Tennis Spieltagsberichte
+# Stilreferenz: SG Arheilgen Tennis Spieltagsberichte
+
 Diese Beispiele dienen der OpenAI-Generierung ausschließlich als Stilreferenz. Sie sind keine aktuellen Rohdaten und sollen nicht als Faktenquelle für neue Spieltage verwendet werden.
 
-Beispiel 1: Saisonauftakt Erwachsene/Senioren mit Vorschau
+## Beispiel 1: Saisonauftakt Erwachsene/Senioren mit Vorschau
+
 Tennis: SG Arheilgen startet mit Licht und Schatten in die Medenrunde
 
 Mit einem deutlichen Sieg und zwei Niederlagen ist die Tennisabteilung der SG Arheilgen am 02./03. Mai in die Medenrunde 2026 gestartet. Während die Herren 55 in der Regionalliga Südwest mit einem klaren 9:0 gegen den TC Oberursel ein echtes Ausrufezeichen setzten, mussten die Herren 30 in der Hessenliga gegen BW Bad Soden eine bittere 4:5-Heimniederlage hinnehmen. Die Herren 40 unterlagen in der Südwest-Liga auswärts beim ST Lohfelden mit 3:6.
@@ -36,7 +38,8 @@ Auch am Sonntag bleibt die Anlage gut gefüllt. Die Damen 30 treffen in der Hess
 
 Auswärts gefordert sind unter anderem die Herren 30 in der Hessenliga beim ST Lohfelden, die Damen bei GW Fulda sowie weitere Jugend- und Aktivenmannschaften. Insgesamt wartet damit ein volles Tenniswochenende mit vielen Heimspielen und der Chance auf die nächsten SGA-Punkte.
 
-Beispiel 2: Jugendbericht
+## Beispiel 2: Jugendbericht
+
 SGA U12 Juniorinnen: (v.l.n.r.: Mario, Clara, Julia, Carla, Ida und Ida; es fehlt Kathi)
 
 SGA Tennis-Jugend startet mit starken Auftritten in die neue Medenrunde
@@ -55,7 +58,8 @@ Junioren U15 II - Kreisliga B: Die zweite U15-Mannschaft der Junioren musste sic
 
 Junioren U12 - Kreisliga B: Die Junioren U12 hatten beim TC Michelstadt einen schweren Auftakt und unterlagen mit 0:6. Adrian, Jona, Anton und Moritz sammelten gegen starke Gastgeber wichtige Matchpraxis. Auch wenn diesmal kein Punkt heraussprang, war es für das junge Team ein wertvoller Einstieg in die Saison.
 
-Beispiel 3: Umfangreicher Aktive- und Seniorenbericht mit Vorschau
+## Beispiel 3: Umfangreicher Aktive- und Seniorenbericht mit Vorschau
+
 Damen 55 II der SGA
 
 Tennisabteilung der SG Arheilgen mit starkem Medenrunden-Auftakt - Damen glänzen, Herren 55 mit engem Regionalliga-Duell
@@ -101,3 +105,19 @@ Herren 40 III - Kreisliga B: Die neu gegründeten Herren 40 III starteten mit ei
 Vorschau: Heimspiel-Highlights am Woogsweg
 
 Am kommenden Wochenende stehen zwischen dem 15. und 17. Mai vier SGA-Partien im Spielplan. Am Freitag, 15. Mai, spielen die Herren 75 auswärts beim TC Geisenheim. Am Samstag, 16. Mai, kommt es am Woogsweg zu einem attraktiven Heimspiel in der Südwest-Liga: Die Herren 40 empfangen um 13 Uhr den TC Bürgerweide Worms. Parallel treten die Herren 55 in der Regionalliga Südwest auswärts beim TC Tübingen an. Am Sonntag, 17. Mai, folgt um 9 Uhr das nächste Heimspiel der Herren 30 in der Hessenliga gegen den KTC Bad Wilhelmshöhe.
+
+## Beispiel 4: Aktive- und Seniorenbericht vom 18.05.2026
+
+Herren 40 I - (v.l.n.r.: Mats Bernow, Oliver Göttlich, Swen Kaupa, Christian Radinger, Jörg Lehning und Jan Kaiser)
+
+**SGA Tennis: Starke Auftritte der SGA-Teams in Regionalliga und Südwest-Liga**
+
+Die Herren 55 setzten in der Regionalliga mit einem klaren 9:0-Auswärtssieg in Tübingen ein Ausrufezeichen. Die Herren 40 eröffneten ihr Heimprogramm in der Südwest-Liga mit einem souveränen 7:2 gegen den TC Bürgerweide Worms. Einzig die Herren 30 mussten sich in der Hessenliga dem KTC Bad Wilhelmshöhe mit 3:6 geschlagen geben, holten aber zwei starke Einzelsiege und ein Doppel gegen eine hochkarätig besetzte Mannschaft um LK-1-Spitzenmann Vishnu Vardhan.
+
+**Herren 55 - Regionalliga Südwest**: Die SGA feierte beim 9:0 in Tübingen einen perfekten Auswärtstag. In den Einzeln punkteten Markus Demmler (6:2, 6:4), Ludek Vildman, Jochen Bredel (6:4, 6:3), Jörg Hosenseidl (6:1, 6:1), Jochen Klein (6:4, 6:2) und Christoph Schmieder, der an Position sechs ohne Spielverlust mit 6:0, 6:0 gewann. Auch die Doppel gingen geschlossen an Arheilgen: Vildman/Hosenseidl siegten nach Aufgabe der Gegner, Jochen Bredel/Kai Burkhardt stellten mit 6:3, 6:1 auf 8:0, ehe Jochen Klein/Christoph Schmieder mit einem klaren 6:1, 6:0 den Endstand herstellten. Die SGA präsentierte sich über alle Positionen stabil und fuhr einen ungefährdeten Auswärtssieg ein.
+
+**Herren 40 - Südwest-Liga**: Beim 7:2-Heimerfolg gegen den TC Bürgerweide Worms lag die SGA nach den Einzeln bereits komfortabel mit 5:1 vorn. Christian Radinger drehte sein Match nervenstark im Match-Tie-Break (1:6, 7:6, 10:4), Jörg Lehning gewann souverän in zwei Sätzen, Jan Kaiser ließ seinem Gegner beim 6:2, 6:0 ebenfalls keine Chance. Zudem mussten die Gäste in zwei Einzeln verletzungsbedingt aufgeben, sodass Mats Bernow und Oliver Göttlich zwei weitere Punkte einfahren konnten; einzig Swen Kaupa unterlag an Position eins. In den Doppeln konnten wegen der Ausfälle nur zwei Partien gespielt werden. Beide gingen über den Match-Tie-Break: Swen Kaupa/Sebastian Schubert behielten die Nerven und holten mit 10:6 den Punkt, während Bernow/Göttlich nach einer sehr umstrittenen Entscheidung hauchdünn mit 8:10 unterlagen. Das dritte Doppel ging kampflos an die SGA. Ein gelungener Heimspieltag, an dem die Arheilger auch in den engen Momenten ablieferten.
+
+**Herren 30 - Hessenliga**: Gegen den KTC Bad Wilhelmshöhe unterlag die SGA mit 3:6, zeigte aber in mehreren Matches starke Ansätze. An den vorderen Positionen trafen Stefan Hofmann gegen LK-1-Spieler Vishnu Vardhan und Andreas Bornhausen gegen Peter-Hendrik Wilk (LK 2) auf hochklassige Gegner und verloren jeweils in zwei Sätzen. Die Arheilger Punkte im Einzel holten Tobias Zimmermann (6:1, 6:3 gegen Eric Soika) und Marco Mander (6:2, 6:3 gegen Dominik Herwig). Im Doppel setzten die Gäste ihre Qualität an den Top-Paarungen durch, doch das dritte SGA-Doppel Wagener/Zimmermann gewann nach starker Leistung 6:3, 7:6. Insgesamt stand gegen die kompakt besetzte Kasseler Mannschaft ein respektables 3:6, das Zuversicht für die kommenden Aufgaben gibt.
+
+**Vorschau**: Am Pfingstwochenende bleibt es im Medenspielkalender der SG Arheilgen vergleichsweise ruhig: Lediglich die Herren 30 in der Hessenliga sind am Montag, 25. Mai, ab 9 Uhr im Einsatz und treten auswärts beim TC Seeheim an. Schon am Mittwoch, 27. Mai, gibt es dann wieder Tennis bei der SGA: Die Herren 65 empfangen um 10 Uhr in der Kreisoberliga den TEC Darmstadt II. Richtig voll wird es auf der Anlage der SGA anschließend am Wochenende rund um den 29. bis 31. Mai. Am Freitag eröffnen die Junioren U15 II um 16 Uhr mit dem Heimspiel gegen die TSG 1846 Darmstadt das Programm. Am Samstag stehen ab 9 Uhr gleich mehrere Heimspiele an: Die Damen 50 treffen auf den TSV Nieder-Ramstadt, die Junioren U18 empfangen RW Sprendlingen III und die Damen 55 II spielen gegen den TC Rüsselsheim. Ein sportliches Highlight folgt um 13 Uhr, wenn die Herren 40 in der Südwest-Liga den TC BW Bad Ems II am Woogsweg erwarten. Um 14 Uhr schließen die Herren 60 mit dem Heimspiel gegen den Isenburger TC II den Samstag ab. Am Sonntag geht es ab 9 Uhr mit einem dichten Heimspielprogramm weiter: Die Damen empfangen in der Verbandsliga TC Olympia Lorsch II, außerdem spielen die Herren 30 II gegen TC Schöneck, die Herren 30 III gegen TUS Griesheim sowie die Herren 40 II gegen die MSG Limburg. Ab 14 Uhr folgen die Heimspiele der Herren II gegen GW Walldorf sowie der Jugendteams Junioren U12, Junioren U12 II und Juniorinnen U12 gegen SSG Langen, TK Langen II und TC Zwingenberg. Abgerundet wird die Heimspielserie am Montag, 1. Juni, wenn die Herren 70 um 10 Uhr in der Verbandsliga den VfR Wiesbaden am Woogsweg empfangen.
