@@ -644,7 +644,14 @@ function serveStatic(req, res, url) {
         ? "text/calendar; charset=utf-8"
         : file.endsWith(".png")
           ? "image/png"
-          : "application/octet-stream";
+          : file.endsWith(".js")
+            ? "application/javascript; charset=utf-8"
+            : "application/octet-stream";
+    if (pathname === "/sga_spieltagsbericht_assistent.html") {
+      const patchTag = '  <script src="/assets/chat-assignment-patch.js"></script>';
+      const html = data.toString("utf8");
+      return send(res, 200, html.includes(patchTag) ? html : html.replace("</body>", `${patchTag}\n</body>`), type);
+    }
     send(res, 200, data, type);
   });
 }
