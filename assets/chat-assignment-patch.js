@@ -2,9 +2,13 @@
   function normalizeMatchText(value) {
     return String(value || "")
       .toLowerCase()
+      .replace(/\bhe\s*(\d{2})\s*(iii|ii|iv|v|i)\b/g, (_, age, roman) => `h${age}${({ i: "1", ii: "2", iii: "3", iv: "4", v: "5" }[roman] || roman)}`)
+      .replace(/\bda\s*(\d{2})\s*(iii|ii|iv|v|i)\b/g, (_, age, roman) => `d${age}${({ i: "1", ii: "2", iii: "3", iv: "4", v: "5" }[roman] || roman)}`)
       .replace(/([a-z]+|[dh])\s*(\d{2})\s*(iii|ii|iv|v|i)\b/g, (_, prefix, age, roman) => `${prefix}${age}${({ i: "1", ii: "2", iii: "3", iv: "4", v: "5" }[roman] || roman)}`)
       .replace(/\b(i{1,3}|iv|v)\b/g, match => ({ i: "1", ii: "2", iii: "3", iv: "4", v: "5" }[match] || match))
       .replace(/u\s*8\s*\+/g, "u8+")
+      .replace(/\bhe\s*(\d{2})/g, "h$1")
+      .replace(/\bda\s*(\d{2})/g, "d$1")
       .replace(/([dh])\s*(\d{2})/g, "$1$2")
       .replace(/[^a-z0-9+]+/g, " ")
       .replace(/\s+/g, " ")
@@ -47,8 +51,8 @@
   function leagueLevelAliases(league) {
     const normalized = normalizeMatchText(league);
     const aliases = [];
-    if (/\brlsw\b|regionalliga/.test(normalized)) aliases.push("Regionalliga", "Regionalliga Südwest", "Südwestliga", "Südwest-Liga", "Suedwest Liga");
-    if (/\bswl\b|\bsuedwest\b|\bsudwest\b|südwest/.test(normalized)) aliases.push("Südwestliga", "Südwest-Liga", "Suedwest Liga");
+    if (/\brswl\b|\brlsw\b|regionalliga/.test(normalized)) aliases.push("Regionalliga", "Regionalliga Südwest", "Südwestliga", "Südwest-Liga", "Suedwest Liga", "RSWL");
+    if (/\bswl\b|\bsuedwest\b|\bsudwest\b|südwest/.test(normalized)) aliases.push("Südwestliga", "Südwest-Liga", "Suedwest Liga", "SWL");
     if (/\bhl\b|hessenliga/.test(normalized)) aliases.push("Hessenliga");
     if (/\bvl\b|verbandsliga/.test(normalized)) aliases.push("Verbandsliga");
     if (/\bgl\b|gruppenliga/.test(normalized)) aliases.push("Gruppenliga");
@@ -151,6 +155,8 @@
       }
       for (const letter of new Set(shortLetters)) {
         addCandidate(candidates, `${letter}${info.age}`, 100);
+        if (letter === "H") addCandidate(candidates, `HE${info.age}`, 100);
+        if (letter === "D") addCandidate(candidates, `DA${info.age}`, 100);
         if (info.suffix) addCandidate(candidates, `${letter}${info.age}${info.suffix}`, 130);
       }
       if (info.isYouth || /^8\+|10|12|15|18$/.test(info.age)) {
