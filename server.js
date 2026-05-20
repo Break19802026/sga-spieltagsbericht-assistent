@@ -650,7 +650,12 @@ function serveStatic(req, res, url) {
     if (pathname === "/sga_spieltagsbericht_assistent.html") {
       const patchTag = '  <script src="/assets/chat-assignment-patch.js"></script>';
       const html = data.toString("utf8");
-      return send(res, 200, html.includes(patchTag) ? html : html.replace("</body>", `${patchTag}\n</body>`), type);
+      if (html.includes(patchTag)) return send(res, 200, html, type);
+      const closingBodyIndex = html.lastIndexOf("</body>");
+      const patchedHtml = closingBodyIndex >= 0
+        ? `${html.slice(0, closingBodyIndex)}${patchTag}\n${html.slice(closingBodyIndex)}`
+        : `${html}\n${patchTag}`;
+      return send(res, 200, patchedHtml, type);
     }
     send(res, 200, data, type);
   });
