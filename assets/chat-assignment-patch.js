@@ -47,8 +47,8 @@
   function leagueLevelAliases(league) {
     const normalized = normalizeMatchText(league);
     const aliases = [];
-    if (/\brlsw\b|regionalliga/.test(normalized)) aliases.push("Regionalliga", "Regionalliga Südwest");
-    if (/\bswl\b|\bsuedwest\b|\bsudwest\b|südwest/.test(normalized)) aliases.push("Südwest-Liga", "Suedwest Liga");
+    if (/\brlsw\b|regionalliga/.test(normalized)) aliases.push("Regionalliga", "Regionalliga Südwest", "Südwestliga", "Südwest-Liga", "Suedwest Liga");
+    if (/\bswl\b|\bsuedwest\b|\bsudwest\b|südwest/.test(normalized)) aliases.push("Südwestliga", "Südwest-Liga", "Suedwest Liga");
     if (/\bhl\b|hessenliga/.test(normalized)) aliases.push("Hessenliga");
     if (/\bvl\b|verbandsliga/.test(normalized)) aliases.push("Verbandsliga");
     if (/\bgl\b|gruppenliga/.test(normalized)) aliases.push("Gruppenliga");
@@ -73,13 +73,47 @@
     return `${date} · ${league} · ${home} - ${guest}${result}`;
   }
 
+  function reportDateValue(report) {
+    if (report?.date) return report.date;
+    const label = String(report?.dateLabel || "");
+    const match = label.match(/(\d{1,2})\.(\d{1,2})\.(\d{2,4})/);
+    if (!match) return "";
+    const year = match[3].length === 2 ? `20${match[3]}` : match[3];
+    return `${year}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}`;
+  }
+
+  function messageDateValue(message) {
+    if (message?.created) {
+      const created = new Date(message.created);
+      if (!Number.isNaN(created.getTime())) {
+        const berlinDate = new Intl.DateTimeFormat("sv-SE", {
+          timeZone: "Europe/Berlin",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit"
+        }).format(created);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(berlinDate)) return berlinDate;
+      }
+    }
+    const text = String(message?.text || message || "");
+    const match = text.match(/\b(\d{1,2})\.(\d{1,2})\.(\d{2,4})\b/);
+    if (!match) return "";
+    const year = match[3].length === 2 ? `20${match[3]}` : match[3];
+    return `${year}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}`;
+  }
+
   function reportByKey(key) {
     if (!key || !Array.isArray(state.reports)) return null;
     return state.reports.find((report, index) => reportKey(report, index) === key) || null;
   }
 
-  function allReportOptions() {
-    return Array.isArray(state.reports) ? state.reports.map((report, index) => ({ report, key: reportKey(report, index), label: reportLabel(report) })) : [];
+  function allReportOptions(message) {
+    const maxDate = messageDateValue(message);
+    return Array.isArray(state.reports)
+      ? state.reports
+        .filter(report => !maxDate || !reportDateValue(report) || reportDateValue(report) <= maxDate)
+        .map(report => ({ report, key: reportKey(report), label: reportLabel(report) }))
+      : [];
   }
 
   window.chatReportCandidates = function chatReportCandidatesPatched(report) {
@@ -107,8 +141,8 @@
         addCandidate(candidates, `${word} ${info.age}`, 95);
         addCandidate(candidates, `${word}${info.age}`, 95);
         for (const level of leagueLevelAliases(report.league || "")) {
-          addCandidate(candidates, `${word} ${info.age} ${level}`, 145);
-          addCandidate(candidates, `${word}${info.age} ${level}`, 145);
+          addCandidate(candidates, `${word} ${info.age} ${level}`, 175);
+          addCandidate(candidates, `${word}${info.age} ${level}`, 175);
         }
         if (info.suffix) {
           addCandidate(candidates, `${word} ${info.age} ${info.suffix}`, 125);
@@ -180,6 +214,8 @@
       return {
         id: message.id || `chat-${Date.now()}-${index}`,
         text,
+        created: message.created || "",
+        author: message.author || "",
         selected: message.manualSelected ? Boolean(message.selected) : true,
         manualSelected: true,
         manualReportKey: reportKey(manualReport),
@@ -198,6 +234,8 @@
       return {
         id: message.id || `chat-${Date.now()}-${index}`,
         text,
+        created: message.created || "",
+        author: message.author || "",
         selected: message.manualSelected ? Boolean(message.selected) : Boolean(report.selected),
         manualSelected: Boolean(message.manualSelected),
         manualReportKey: message.manualReportKey || "",
@@ -210,6 +248,8 @@
     return {
       id: message.id || `chat-${Date.now()}-${index}`,
       text,
+      created: message.created || "",
+      author: message.author || "",
       selected: message.manualSelected ? Boolean(message.selected) : false,
       manualSelected: Boolean(message.manualSelected),
       manualReportKey: message.manualReportKey || "",
@@ -246,7 +286,7 @@
   }
 
   function assignmentOptionsForMessage(message) {
-    const options = allReportOptions();
+    const options = allReportOptions(message);
     if (message.assignmentStatus !== "unclear") return options;
     const possibleKeys = new Set(Array.isArray(message.possibleReportKeys) ? message.possibleReportKeys : []);
     if (possibleKeys.size) return options.filter(option => possibleKeys.has(option.key));
