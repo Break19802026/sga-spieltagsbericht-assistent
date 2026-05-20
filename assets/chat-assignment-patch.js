@@ -24,15 +24,15 @@
     const sgaTeam = [report.home, report.guest].find(team => /sg\s*arheilgen/i.test(team || "")) || "";
     const normalized = normalizeMatchText(sgaTeam);
     const suffix = normalized.match(/\b([1-5])\b/);
-    return suffix ? suffix[1] : "";
+    return suffix ? suffix[1] : (sgaTeam ? "1" : "");
   }
 
   function teamIdentityFromReport(report) {
     const league = normalizeMatchText(report.league || "");
     const full = normalizeMatchText(`${report.league || ""} ${report.home || ""} ${report.guest || ""}`);
     const suffix = reportTeamSuffix(report);
-    const isFemale = /\b(damen|juniorinnen)\b/.test(full) || /\bd(?:12|15|18)\b/.test(full);
-    const isMale = /\b(herren|junioren)\b/.test(full) || /\bh(?:12|15|18)\b/.test(full);
+    const isFemale = /\b(damen|juniorinnen)\b/.test(full) || /\bd(?:00|10|12|15|18|30|40|50|55|60|65|70|75)\b/.test(full);
+    const isMale = /\b(herren|junioren)\b/.test(full) || /\bh(?:00|10|12|15|18|30|40|50|55|60|65|70|75)\b/.test(full);
     const isYouth = reportLooksYouthPatched(report) || /\b(juniorinnen|junioren|u8\+|u10|u12|u15|u18|d12|d15|d18|h12|h15|h18)\b/.test(full);
     const ageMatch = full.match(/\b(?:u|d|h)?(8\+|10|12|15|18|30|40|50|55|60|65|70|75)\b/);
     const age = ageMatch ? ageMatch[1] : "";
