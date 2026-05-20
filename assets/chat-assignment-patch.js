@@ -58,6 +58,30 @@
     return aliases;
   }
 
+  function reportKey(report, index = -1) {
+    if (!report) return "";
+    return String(report.id || report.url || report.sourceUrl || `report-${index >= 0 ? index : state.reports.indexOf(report)}`);
+  }
+
+  function reportLabel(report) {
+    if (!report) return "Partie auswählen";
+    const date = report.dateLabel || "Ohne Datum";
+    const league = report.league || "Spielbericht";
+    const home = report.home || "Heimteam";
+    const guest = report.guest || "Gastteam";
+    const result = report.result ? ` · ${report.result}` : "";
+    return `${date} · ${league} · ${home} - ${guest}${result}`;
+  }
+
+  function reportByKey(key) {
+    if (!key || !Array.isArray(state.reports)) return null;
+    return state.reports.find((report, index) => reportKey(report, index) === key) || null;
+  }
+
+  function allReportOptions() {
+    return Array.isArray(state.reports) ? state.reports.map((report, index) => ({ report, key: reportKey(report, index), label: reportLabel(report) })) : [];
+  }
+
   window.chatReportCandidates = function chatReportCandidatesPatched(report) {
     const info = teamIdentityFromReport(report);
     const candidates = [];
@@ -127,11 +151,11 @@
     return false;
   }
 
-  window.matchingReportsForChatMessage = function matchingReportsForChatMessagePatched(text) {
+  function rankedReportsForChatMessage(text) {
     const normalized = normalizeMatchText(text);
     const compact = compactMatchText(text);
     if (!normalized || !Array.isArray(state.reports)) return [];
-    const ranked = state.reports
+    return state.reports
       .map(report => {
         const hits = window.chatReportCandidates(report).filter(candidate => candidateMatchesMessage(candidate, normalized, compact));
         const score = [...new Map(hits.map(candidate => [candidate.value, candidate])).values()]
@@ -140,6 +164,10 @@
       })
       .filter(match => match.score > 0)
       .sort((a, b) => b.score - a.score);
+  }
+
+  window.matchingReportsForChatMessage = function matchingReportsForChatMessagePatched(text) {
+    const ranked = rankedReportsForChatMessage(text);
     if (!ranked.length) return [];
     const topScore = ranked[0].score;
     return ranked.filter(match => match.score === topScore).map(match => match.report);
@@ -147,6 +175,21 @@
 
   window.enrichChatMessage = function enrichChatMessagePatched(message, index) {
     const text = String(message.text || message).trim();
+    const manualReport = reportByKey(message.manualReportKey);
+    if (manualReport) {
+      return {
+        id: message.id || `chat-${Date.now()}-${index}`,
+        text,
+        selected: message.manualSelected ? Boolean(message.selected) : true,
+        manualSelected: true,
+        manualReportKey: reportKey(manualReport),
+        assignmentStatus: "good",
+        assignmentLabel: `Manuell zugeordnet: ${reportLabel(manualReport)}`,
+        possibleReportKeys: Array.isArray(message.possibleReportKeys) ? message.possibleReportKeys : []
+      };
+    }
+
+    const ranked = rankedReportsForChatMessage(text);
     let matches = window.matchingReportsForChatMessage(text);
     const selectedMatches = matches.filter(report => report.selected);
     if (matches.length > 1 && selectedMatches.length === 1) matches = selectedMatches;
@@ -157,18 +200,121 @@
         text,
         selected: message.manualSelected ? Boolean(message.selected) : Boolean(report.selected),
         manualSelected: Boolean(message.manualSelected),
+        manualReportKey: message.manualReportKey || "",
         assignmentStatus: report.selected ? "good" : "unselected",
-        assignmentLabel: `${report.league || "Spielbericht"} · ${report.home || "SGA"} - ${report.guest || "Gegner"}`
+        assignmentLabel: `${report.league || "Spielbericht"} · ${report.home || "SGA"} - ${report.guest || "Gegner"}`,
+        possibleReportKeys: [reportKey(report)]
       };
     }
+    const possibleReports = matches.length > 1 ? matches : ranked.slice(0, 6).map(match => match.report);
     return {
       id: message.id || `chat-${Date.now()}-${index}`,
       text,
       selected: message.manualSelected ? Boolean(message.selected) : false,
       manualSelected: Boolean(message.manualSelected),
+      manualReportKey: message.manualReportKey || "",
       assignmentStatus: "unclear",
-      assignmentLabel: matches.length > 1 ? "Mehrere mögliche Mannschaften gefunden" : "Keine eindeutige Mannschaft gefunden"
+      assignmentLabel: matches.length > 1 ? "Mehrere mögliche Mannschaften gefunden" : "Keine eindeutige Mannschaft gefunden",
+      possibleReportKeys: possibleReports.map(report => reportKey(report))
     };
+  };
+
+  function ensureChatAssignmentStyles() {
+    if (document.getElementById("sga-chat-assignment-styles")) return;
+    const style = document.createElement("style");
+    style.id = "sga-chat-assignment-styles";
+    style.textContent = `
+      .chat-assignment-select {
+        appearance: none;
+        width: 100%;
+        margin-top: 10px;
+        padding: 9px 12px;
+        border: 1px solid rgba(20, 163, 218, 0.35);
+        border-radius: 8px;
+        background: #eef9fd;
+        color: #12394a;
+        font: inherit;
+      }
+      .chat-assignment-hint {
+        display: block;
+        margin-top: 8px;
+        color: #3c6474;
+        font-size: 0.88rem;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function assignmentOptionsForMessage(message) {
+    const options = allReportOptions();
+    if (message.assignmentStatus !== "unclear") return options;
+    const possibleKeys = new Set(Array.isArray(message.possibleReportKeys) ? message.possibleReportKeys : []);
+    if (possibleKeys.size) return options.filter(option => possibleKeys.has(option.key));
+    return options;
+  }
+
+  window.renderChatMessages = function renderChatMessagesPatched() {
+    ensureChatAssignmentStyles();
+    els.applyChatMessages.disabled = !state.chatMessages.some(message => message.selected);
+    els.selectAllChatMessages.disabled = !state.chatMessages.length;
+    if (!state.chatMessages.length) {
+      els.chatMessageList.innerHTML = "";
+      return;
+    }
+
+    els.chatMessageList.innerHTML = state.chatMessages.map((message, index) => {
+      const assignmentClass = message.assignmentStatus === "good" ? "chat-good" : message.assignmentStatus === "unclear" ? "chat-warn" : "chat-muted";
+      const options = assignmentOptionsForMessage(message);
+      const showSelect = message.assignmentStatus === "unclear" && options.length;
+      const selectHtml = showSelect ? `
+        <span class="chat-assignment-hint">${message.assignmentLabel && message.assignmentLabel.includes("Mehrere") ? "Bitte eine der möglichen Partien auswählen:" : "Bitte die passende Partie auswählen:"}</span>
+        <select class="chat-assignment-select" data-chat-assign-index="${index}">
+          <option value="">Noch nicht zugeordnet</option>
+          ${options.map(option => `<option value="${escapeHtml(option.key)}" ${message.manualReportKey === option.key ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+        </select>
+      ` : "";
+      return `
+        <label class="report-card ${assignmentClass}">
+          <input type="checkbox" data-chat-index="${index}" ${message.selected ? "checked" : ""}>
+          <span>
+            <span class="report-title">Nachricht ${index + 1}</span>
+            <span class="report-meta">${escapeHtml(message.assignmentLabel || "")}</span>
+            <span class="report-meta">${escapeHtml(message.text)}</span>
+            ${selectHtml}
+          </span>
+        </label>
+      `;
+    }).join("");
+
+    els.chatMessageList.querySelectorAll("input[type='checkbox']").forEach(input => {
+      input.addEventListener("change", event => {
+        const index = Number(event.target.dataset.chatIndex);
+        state.chatMessages[index].selected = event.target.checked;
+        state.chatMessages[index].manualSelected = true;
+        save();
+        window.renderChatMessages();
+        const selected = state.chatMessages.filter(message => message.selected).length;
+        setChatStatus(`${state.chatMessages.length} Nachrichten importiert, ${selected} ausgewählt.`);
+      });
+    });
+
+    els.chatMessageList.querySelectorAll(".chat-assignment-select").forEach(select => {
+      select.addEventListener("click", event => event.stopPropagation());
+      select.addEventListener("change", event => {
+        const index = Number(event.target.dataset.chatAssignIndex);
+        const key = event.target.value;
+        if (!state.chatMessages[index]) return;
+        state.chatMessages[index].manualReportKey = key;
+        state.chatMessages[index].manualSelected = Boolean(key);
+        if (key) state.chatMessages[index].selected = true;
+        state.chatMessages[index] = window.enrichChatMessage(state.chatMessages[index], index);
+        save();
+        window.renderChatMessages();
+        const selected = state.chatMessages.filter(message => message.selected).length;
+        const unclear = state.chatMessages.filter(message => message.assignmentStatus === "unclear").length;
+        setChatStatus(`${state.chatMessages.length} Nachrichten importiert, ${selected} ausgewählt, ${unclear} manuell zu prüfen.`);
+      });
+    });
   };
 
   window.refreshChatAssignments = function refreshChatAssignmentsPatched() {
@@ -176,7 +322,7 @@
     state.chatMessages = state.chatMessages
       .map((message, index) => window.enrichChatMessage(message, index))
       .filter(message => message.text);
-    renderChatMessages();
+    window.renderChatMessages();
     const selected = state.chatMessages.filter(message => message.selected).length;
     const unclear = state.chatMessages.filter(message => message.assignmentStatus === "unclear").length;
     setChatStatus(`${state.chatMessages.length} Nachrichten importiert, ${selected} ausgewählt, ${unclear} manuell zu prüfen.`);
@@ -188,6 +334,7 @@
     matchingReportsForChatMessage = window.matchingReportsForChatMessage;
     enrichChatMessage = window.enrichChatMessage;
     refreshChatAssignments = window.refreshChatAssignments;
+    renderChatMessages = window.renderChatMessages;
   } catch (error) {
     console.warn("SGA chat assignment patch could not replace all functions:", error);
   }
