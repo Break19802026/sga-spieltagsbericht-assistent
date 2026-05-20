@@ -648,13 +648,19 @@ function serveStatic(req, res, url) {
             ? "application/javascript; charset=utf-8"
             : "application/octet-stream";
     if (pathname === "/sga_spieltagsbericht_assistent.html") {
-      const patchTag = '  <script src="/assets/chat-assignment-patch.js"></script>';
+      const patchMarker = "/* SGA_CHAT_ASSIGNMENT_PATCH */";
       const html = data.toString("utf8");
-      if (html.includes(patchTag)) return send(res, 200, html, type);
-      const closingBodyIndex = html.lastIndexOf("</body>");
-      const patchedHtml = closingBodyIndex >= 0
-        ? `${html.slice(0, closingBodyIndex)}${patchTag}\n${html.slice(closingBodyIndex)}`
-        : `${html}\n${patchTag}`;
+      if (html.includes(patchMarker)) return send(res, 200, html, type);
+      let patchSource = "";
+      try {
+        patchSource = fs.readFileSync(path.join(root, "assets", "chat-assignment-patch.js"), "utf8");
+      } catch {
+        patchSource = "";
+      }
+      const closingScriptIndex = html.lastIndexOf("</script>");
+      const patchedHtml = patchSource && closingScriptIndex >= 0
+        ? `${html.slice(0, closingScriptIndex)}\n${patchMarker}\n${patchSource}\n${html.slice(closingScriptIndex)}`
+        : html;
       return send(res, 200, patchedHtml, type);
     }
     send(res, 200, data, type);
