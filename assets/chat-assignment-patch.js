@@ -63,6 +63,9 @@
     const candidates = [];
     addCandidate(candidates, report.league || "", 70);
     addCandidate(candidates, info.league, 70);
+    for (const level of leagueLevelAliases(report.league || "")) {
+      addCandidate(candidates, level, 55);
+    }
 
     const genderWords = [];
     const shortLetters = [];
@@ -131,7 +134,8 @@
     const ranked = state.reports
       .map(report => {
         const hits = window.chatReportCandidates(report).filter(candidate => candidateMatchesMessage(candidate, normalized, compact));
-        const score = hits.length ? Math.max(...hits.map(candidate => candidate.weight)) : 0;
+        const score = [...new Map(hits.map(candidate => [candidate.value, candidate])).values()]
+          .reduce((sum, candidate) => sum + candidate.weight, 0);
         return { report, score };
       })
       .filter(match => match.score > 0)
