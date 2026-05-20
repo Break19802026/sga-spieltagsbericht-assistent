@@ -96,11 +96,11 @@
 
   function candidateMatchesMessage(candidate, normalizedMessage, compactMessage) {
     if (!candidate.value) return false;
-    const escaped = candidate.value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escaped = candidate.value.replace(/\+/g, "\\+");
     const spacedPattern = new RegExp(`(^| )${escaped}( |$)`);
     if (spacedPattern.test(normalizedMessage)) return true;
     if (candidate.compact && candidate.compact.length >= 3) {
-      const compactPattern = new RegExp(`(^|[^a-z0-9])${candidate.compact.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`);
+      const compactPattern = new RegExp(`(^|[^a-z0-9])${candidate.compact.replace(/\+/g, "\\+")}([^a-z0-9]|$)`);
       return compactPattern.test(compactMessage);
     }
     return false;
