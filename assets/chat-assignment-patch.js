@@ -44,6 +44,20 @@
     if (normalized.length >= 2) candidates.push({ value: normalized, compact: compactMatchText(normalized), weight });
   }
 
+  function leagueLevelAliases(league) {
+    const normalized = normalizeMatchText(league);
+    const aliases = [];
+    if (/\brlsw\b|regionalliga/.test(normalized)) aliases.push("Regionalliga", "Regionalliga Südwest");
+    if (/\bswl\b|\bsuedwest\b|\bsudwest\b|südwest/.test(normalized)) aliases.push("Südwest-Liga", "Suedwest Liga");
+    if (/\bhl\b|hessenliga/.test(normalized)) aliases.push("Hessenliga");
+    if (/\bvl\b|verbandsliga/.test(normalized)) aliases.push("Verbandsliga");
+    if (/\bgl\b|gruppenliga/.test(normalized)) aliases.push("Gruppenliga");
+    if (/\bkol\b|kreisoberliga/.test(normalized)) aliases.push("Kreisoberliga");
+    if (/\bka\b|kreisliga a/.test(normalized)) aliases.push("Kreisliga A");
+    if (/\bkb\b|kreisliga b/.test(normalized)) aliases.push("Kreisliga B");
+    return aliases;
+  }
+
   window.chatReportCandidates = function chatReportCandidatesPatched(report) {
     const info = teamIdentityFromReport(report);
     const candidates = [];
@@ -65,6 +79,10 @@
       for (const word of new Set(genderWords)) {
         addCandidate(candidates, `${word} ${info.age}`, 95);
         addCandidate(candidates, `${word}${info.age}`, 95);
+        for (const level of leagueLevelAliases(report.league || "")) {
+          addCandidate(candidates, `${word} ${info.age} ${level}`, 145);
+          addCandidate(candidates, `${word}${info.age} ${level}`, 145);
+        }
         if (info.suffix) {
           addCandidate(candidates, `${word} ${info.age} ${info.suffix}`, 125);
           addCandidate(candidates, `${word}${info.age}${info.suffix}`, 125);
