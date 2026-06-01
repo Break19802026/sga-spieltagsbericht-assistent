@@ -466,6 +466,66 @@ ${reviewLoopStateText()}`;
     window.__sgaReviewLoopLoginPatched = true;
   }
 
+  function patchPrintReportFormat() {
+    if (window.__sgaPrintReportFormatPatched) return;
+
+    if (typeof buildPrompt === "function") {
+      const originalBuildPrompt = buildPrompt;
+      buildPrompt = function buildPromptWithPrintFormat() {
+        const prompt = originalBuildPrompt();
+        const marker = "Standardformat für Printmedien nach APO 18.05.2026";
+        if (prompt.includes(marker)) return prompt;
+        const formatRules = `${marker}:
+- Nutze für jeden Print-Bericht genau den Aufbau der Datei "APO 18.05.2026 SGA Tennis Aktive Senioren".
+- Zeile 1 optional: kurze Bild-/Kontextzeile, falls vorhanden, zum Beispiel "Herren 40 I - (v.l.n.r.: ...)".
+- Danach eine prägnante Überschrift in einer eigenen Zeile, fett gesetzt.
+- Danach ein kurzer Lead-Absatz als Fließtext mit den wichtigsten Ergebnissen und der sportlichen Einordnung.
+- Danach pro Mannschaft genau ein eigener Fließtext-Absatz. Am Absatzanfang steht "Mannschaft - Liga:" fett, danach läuft der Text normal weiter.
+- Falls Vorschau-Daten vorhanden sind: letzter Absatz im Format "Vorschau:" fett am Anfang, danach normaler Fließtext direkt dahinter.
+- Keine separaten Zwischenüberschriften wie Regionale Ebene, Landesebene, Kreisebene, Ergebnisse oder Vorschau verwenden.
+- Keine Listen, keine Stichpunkte und keine Tabellen im Print-Bericht.
+- Nur Überschrift, "Mannschaft - Liga:" und "Vorschau:" fett setzen. Spielernamen, Ergebnisse und restlicher Text bleiben normal.
+- Wenn nur Klartext möglich ist, verwende Markdown-Fettmarkierung mit **...**, damit der Word-/Google-Docs-Export echte Fettformatierung erzeugen kann.
+`;
+        return prompt.replace(/\nKontrolle vor Ausgabe:/, `\n${formatRules}\nKontrolle vor Ausgabe:`);
+      };
+    }
+
+    if (typeof shouldBoldOpeningLabel === "function") {
+      shouldBoldOpeningLabel = function shouldBoldOpeningLabelPatched(line) {
+        const colonIndex = line.indexOf(":");
+        if (colonIndex < 4 || colonIndex > 95) return false;
+        const label = line.slice(0, colonIndex).trim();
+        if (/\*\*/.test(label)) return false;
+        if (/^(Vorschau|Ausblick|Fazit)$/i.test(label)) return true;
+        if (!label.includes(" - ") && !label.includes(" – ")) return false;
+        return /(Damen|Herren|Junior|Juniorinnen|Gemischt|U\d|D\d|H\d|Regionalliga|Südwest|Hessenliga|Verbandsliga|Gruppenliga|Kreisoberliga|Kreisliga|Liga|Klasse)/i.test(label);
+      };
+    }
+
+    if (typeof markdownLineToHtml === "function") {
+      markdownLineToHtml = function markdownLineToHtmlPatched(line) {
+        if (typeof shouldBoldOpeningLabel === "function" && shouldBoldOpeningLabel(line)) {
+          const colonIndex = line.indexOf(":");
+          const label = line.slice(0, colonIndex).trim();
+          const rest = line.slice(colonIndex + 1);
+          return `<strong>${inlineFormatting(`${label}:`)}</strong>${inlineFormatting(rest)}`;
+        }
+        return inlineFormatting(line);
+      };
+    }
+
+    if (typeof looksLikeSectionHeading === "function") {
+      looksLikeSectionHeading = function looksLikeSectionHeadingPatched(line) {
+        if (!line || line.length > 95) return false;
+        if (typeof shouldBoldOpeningLabel === "function" && shouldBoldOpeningLabel(line)) return false;
+        return /^(Vorschau|Ausblick|Fazit):?$/i.test(String(line).trim());
+      };
+    }
+
+    window.__sgaPrintReportFormatPatched = true;
+  }
+
   window.renderChatMessages = function renderChatMessagesPatched() {
     ensureChatAssignmentStyles();
     els.applyChatMessages.disabled = !state.chatMessages.some(message => message.selected);
@@ -556,6 +616,7 @@ ${reviewLoopStateText()}`;
     ensureChatAssignmentStyles();
     ensureReviewLoopUi();
     patchLoginForReviewLoop();
+    patchPrintReportFormat();
   } catch (error) {
     console.warn("SGA chat assignment patch could not replace all functions:", error);
   }
@@ -564,6 +625,7 @@ ${reviewLoopStateText()}`;
     ensureChatAssignmentStyles();
     ensureReviewLoopUi();
     patchLoginForReviewLoop();
+    patchPrintReportFormat();
     if (!window.__sgaChatAssignmentPatchBound && typeof els !== "undefined") {
       window.__sgaChatAssignmentPatchBound = true;
       els.reportList?.addEventListener("change", () => window.setTimeout(window.refreshChatAssignments, 0));
