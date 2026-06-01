@@ -11,6 +11,7 @@ const sessionSecret = process.env.SESSION_SECRET || appPassword || "local-dev-se
 const openaiApiKey = process.env.OPENAI_API_KEY || "";
 const openaiModel = process.env.OPENAI_MODEL || "gpt-5";
 const examplesPath = path.join(root, "examples", "reports.md");
+const defaultClubMeetingsUrl = "https://htv.liga.nu/cgi-bin/WebObjects/nuLigaTENDE.woa/4/wa/clubMeetings?club=24783";
 const supplementalYouthSources = [
   {
     label: "U8+",
@@ -264,9 +265,10 @@ async function handleDiscover(req, res, url) {
 
   try {
     const sources = [
-      { url: sourceUrl, label: "" },
+      { url: defaultClubMeetingsUrl, label: "", required: true },
+      sourceUrl && sourceUrl !== defaultClubMeetingsUrl ? { url: sourceUrl, label: "" } : null,
       ...supplementalYouthSources
-    ];
+    ].filter(Boolean);
     const uniqueSources = [];
     const seenUrls = new Set();
     for (const source of sources) {
@@ -285,8 +287,8 @@ async function handleDiscover(req, res, url) {
           sourceLabel: source.label
         }));
       } catch (error) {
-        if (source.url === sourceUrl) throw error;
-        warnings.push(`${source.label}: ${error.message || "konnte nicht geladen werden"}`);
+        if (source.required) throw error;
+        warnings.push(`${source.label || "Zusatzquelle"}: ${error.message || "konnte nicht geladen werden"}`);
       }
     }
 
