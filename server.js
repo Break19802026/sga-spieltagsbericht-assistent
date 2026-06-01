@@ -14,15 +14,15 @@ const examplesPath = path.join(root, "examples", "reports.md");
 const supplementalYouthSources = [
   {
     label: "U8+",
-    url: "https://htv.liga.nu/cgi-bin/WebObjects/nuLigaTENDE.woa/wa/groupPage?championship=U8%2FU10+2026&group=11"
+    url: "https://htv.liga.nu/cgi-bin/WebObjects/nuLigaTENDE.woa/wa/teamPortrait?team=3671410&championship=U8%2FU10+2026&group=11"
   },
   {
     label: "Flex U10",
-    url: "https://htv.liga.nu/cgi-bin/WebObjects/nuLigaTENDE.woa/wa/groupPage?championship=U8%2FU10+2026&group=83"
+    url: "https://htv.liga.nu/cgi-bin/WebObjects/nuLigaTENDE.woa/wa/teamPortrait?team=3671411&championship=U8%2FU10+2026&group=83"
   },
   {
     label: "U10",
-    url: "https://htv.liga.nu/cgi-bin/WebObjects/nuLigaTENDE.woa/wa/groupPage?championship=U8%2FU10+2026&group=55"
+    url: "https://htv.liga.nu/cgi-bin/WebObjects/nuLigaTENDE.woa/wa/teamPortrait?team=3607106&championship=U8%2FU10+2026&group=55"
   }
 ];
 
