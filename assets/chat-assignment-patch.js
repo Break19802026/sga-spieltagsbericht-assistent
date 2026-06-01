@@ -391,10 +391,12 @@
     const button = document.getElementById("sgaRegenerateWithReview");
     if (!status || typeof requestGeneratePassword !== "function") return;
     if (!requestGeneratePassword("review-loop")) {
+      window.__sgaPendingReviewLoop = true;
       status.textContent = "Bitte Passwort eingeben, um den Bericht neu zu erstellen.";
       status.classList.remove("error");
       return;
     }
+    window.__sgaPendingReviewLoop = false;
     const report = (els.generatedOutput?.value || state.generatedText || "").trim();
     if (!report) {
       status.textContent = "Bitte zuerst einen Bericht generieren oder einfügen.";
@@ -447,6 +449,21 @@ ${reviewLoopStateText()}`;
     } finally {
       button.disabled = false;
     }
+  }
+
+  function patchLoginForReviewLoop() {
+    if (window.__sgaReviewLoopLoginPatched || typeof login !== "function") return;
+    const originalLogin = login;
+    login = async function loginWithReviewLoop(event) {
+      await originalLogin(event);
+      if (state.authenticated && window.__sgaPendingReviewLoop) {
+        window.__sgaPendingReviewLoop = false;
+        await regenerateReportWithReviewLoop();
+      }
+    };
+    els.loginForm?.removeEventListener("submit", originalLogin);
+    els.loginForm?.addEventListener("submit", login);
+    window.__sgaReviewLoopLoginPatched = true;
   }
 
   window.renderChatMessages = function renderChatMessagesPatched() {
@@ -538,6 +555,7 @@ ${reviewLoopStateText()}`;
     }
     ensureChatAssignmentStyles();
     ensureReviewLoopUi();
+    patchLoginForReviewLoop();
   } catch (error) {
     console.warn("SGA chat assignment patch could not replace all functions:", error);
   }
@@ -545,6 +563,7 @@ ${reviewLoopStateText()}`;
   window.addEventListener("DOMContentLoaded", () => {
     ensureChatAssignmentStyles();
     ensureReviewLoopUi();
+    patchLoginForReviewLoop();
     if (!window.__sgaChatAssignmentPatchBound && typeof els !== "undefined") {
       window.__sgaChatAssignmentPatchBound = true;
       els.reportList?.addEventListener("change", () => window.setTimeout(window.refreshChatAssignments, 0));
