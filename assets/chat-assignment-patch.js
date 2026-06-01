@@ -287,6 +287,41 @@
         color: #3c6474;
         font-size: 0.88rem;
       }
+      .sga-review-panel {
+        margin-top: 14px;
+        border: 1px solid #dbe3ed;
+        border-radius: 8px;
+        background: #f8fafc;
+        padding: 14px;
+      }
+      .sga-review-panel h4 {
+        margin: 0 0 10px;
+        font-size: 15px;
+      }
+      .sga-review-checks {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px 12px;
+        margin-bottom: 12px;
+      }
+      .sga-review-checks label,
+      .sga-review-pass {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+        font-weight: 700;
+      }
+      .sga-review-panel textarea {
+        width: 100%;
+        min-height: 96px;
+        margin-top: 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 11px 12px;
+      }
+      @media (max-width: 820px) {
+        .sga-review-checks { grid-template-columns: 1fr; }
+      }
     `;
     document.head.appendChild(style);
   }
@@ -294,9 +329,124 @@
   function assignmentOptionsForMessage(message) {
     const options = allReportOptions(message);
     if (message.assignmentStatus !== "unclear") return options;
-    const possibleKeys = new Set(Array.isArray(message.possibleReportKeys) ? message.possibleReportKeys : []);
-    if (possibleKeys.size) return options.filter(option => possibleKeys.has(option.key));
     return options;
+  }
+
+  function ensureReviewLoopUi() {
+    if (document.getElementById("sgaReviewPanel") || typeof els === "undefined" || !els.reviewOutput) return;
+    const panel = document.createElement("div");
+    panel.className = "sga-review-panel";
+    panel.id = "sgaReviewPanel";
+    panel.innerHTML = `
+      <h4>Eigene Prüfung abhaken</h4>
+      <div class="sga-review-checks">
+        <label><input type="checkbox" data-sga-review-check="Namen geprüft"> Namen geprüft</label>
+        <label><input type="checkbox" data-sga-review-check="Ergebnisse geprüft"> Ergebnisse geprüft</label>
+        <label><input type="checkbox" data-sga-review-check="Mannschaften/Ligen geprüft"> Mannschaften/Ligen geprüft</label>
+        <label><input type="checkbox" data-sga-review-check="Vorschau geprüft"> Vorschau geprüft</label>
+        <label><input type="checkbox" data-sga-review-check="Stil und Ausgabeformat geprüft"> Stil und Ausgabeformat geprüft</label>
+      </div>
+      <label class="sga-review-pass"><input type="checkbox" id="sgaReviewPass"> Habe geprüft, passt</label>
+      <label class="field"><span>Konkrete Änderungswünsche</span><textarea id="sgaReviewCorrections" placeholder="Optional: Namen, Ergebnisse, Formulierungen oder konkrete Änderungen eintragen."></textarea></label>
+      <div class="actions">
+        <button class="btn" id="sgaRegenerateWithReview" type="button">Bericht mit Prüfung neu erstellen</button>
+      </div>
+      <div class="status" id="sgaReviewLoopStatus"></div>
+    `;
+    els.reviewOutput.insertAdjacentElement("afterend", panel);
+
+    const stored = window.__sgaReviewLoopState || {};
+    panel.querySelectorAll("[data-sga-review-check]").forEach(input => {
+      input.checked = Array.isArray(stored.checks) && stored.checks.includes(input.dataset.sgaReviewCheck);
+      input.addEventListener("change", saveReviewLoopState);
+    });
+    panel.querySelector("#sgaReviewPass").checked = Boolean(stored.pass);
+    panel.querySelector("#sgaReviewCorrections").value = stored.corrections || "";
+    panel.querySelector("#sgaReviewPass").addEventListener("change", saveReviewLoopState);
+    panel.querySelector("#sgaReviewCorrections").addEventListener("input", saveReviewLoopState);
+    panel.querySelector("#sgaRegenerateWithReview").addEventListener("click", regenerateReportWithReviewLoop);
+  }
+
+  function saveReviewLoopState() {
+    const panel = document.getElementById("sgaReviewPanel");
+    if (!panel) return;
+    window.__sgaReviewLoopState = {
+      checks: [...panel.querySelectorAll("[data-sga-review-check]:checked")].map(input => input.dataset.sgaReviewCheck),
+      pass: Boolean(panel.querySelector("#sgaReviewPass")?.checked),
+      corrections: panel.querySelector("#sgaReviewCorrections")?.value || ""
+    };
+  }
+
+  function reviewLoopStateText() {
+    saveReviewLoopState();
+    const reviewState = window.__sgaReviewLoopState || {};
+    const checks = Array.isArray(reviewState.checks) && reviewState.checks.length ? reviewState.checks.join(", ") : "Keine Punkte abgehakt";
+    const pass = reviewState.pass ? "Nutzerprüfung: geprüft, passt." : "Nutzerprüfung: Änderungen/Prüfung offen.";
+    const corrections = String(reviewState.corrections || "").trim() || "[Keine konkreten Änderungswünsche eingetragen]";
+    return `Abgehakte Prüfpunkte: ${checks}\n${pass}\nKonkrete Änderungswünsche:\n${corrections}`;
+  }
+
+  async function regenerateReportWithReviewLoop() {
+    const status = document.getElementById("sgaReviewLoopStatus");
+    const button = document.getElementById("sgaRegenerateWithReview");
+    if (!status || typeof requestGeneratePassword !== "function") return;
+    if (!requestGeneratePassword("review-loop")) {
+      status.textContent = "Bitte Passwort eingeben, um den Bericht neu zu erstellen.";
+      status.classList.remove("error");
+      return;
+    }
+    const report = (els.generatedOutput?.value || state.generatedText || "").trim();
+    if (!report) {
+      status.textContent = "Bitte zuerst einen Bericht generieren oder einfügen.";
+      status.classList.add("error");
+      return;
+    }
+    const review = (els.reviewOutput?.value || state.reviewText || "").trim();
+    const prompt = `Überarbeite den folgenden SGA-Tennisbericht anhand der maschinellen Prüfung und der Nutzerprüfung.
+
+Regeln:
+- Erstelle direkt den finalen Bericht, keine Analyse davor oder danach.
+- Übernimm konkrete Änderungswünsche des Nutzers vorrangig.
+- Wenn der Nutzer "geprüft, passt" markiert hat und keine Änderungswünsche vorhanden sind, nimm nur zwingend notwendige Korrekturen aus der maschinellen Prüfung vor.
+- Erfinde keine Fakten, Ergebnisse, Namen oder Termine.
+- Bewahre den gewünschten Stil, Kanal und die Formatierungsregeln aus dem Master-Prompt.
+
+Master-Prompt:
+${currentPromptText()}
+
+Bisheriger Bericht:
+${report}
+
+Maschinelle Prüfung:
+${review || "[Keine maschinelle Prüfung vorhanden]"}
+
+Nutzerprüfung:
+${reviewLoopStateText()}`;
+
+    status.textContent = "Bericht wird mit deiner Prüfung neu erstellt ...";
+    status.classList.remove("error");
+    button.disabled = true;
+    try {
+      const response = await fetch(`${apiBase}/api/generate`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Der Bericht konnte nicht neu erstellt werden.");
+      state.generatedText = payload.text || "";
+      if (els.generatedOutput) els.generatedOutput.value = state.generatedText;
+      if (typeof save === "function") save();
+      status.textContent = "Bericht wurde anhand deiner Prüfung neu erstellt.";
+      if (typeof render === "function") render();
+      ensureReviewLoopUi();
+    } catch (error) {
+      status.textContent = error.message || "Der Bericht konnte nicht neu erstellt werden.";
+      status.classList.add("error");
+    } finally {
+      button.disabled = false;
+    }
   }
 
   window.renderChatMessages = function renderChatMessagesPatched() {
@@ -386,11 +536,15 @@
       if (typeof els !== "undefined" && els.sourceUrl) els.sourceUrl.value = defaultSourceUrl;
       if (typeof save === "function") save();
     }
+    ensureChatAssignmentStyles();
+    ensureReviewLoopUi();
   } catch (error) {
     console.warn("SGA chat assignment patch could not replace all functions:", error);
   }
 
   window.addEventListener("DOMContentLoaded", () => {
+    ensureChatAssignmentStyles();
+    ensureReviewLoopUi();
     if (!window.__sgaChatAssignmentPatchBound && typeof els !== "undefined") {
       window.__sgaChatAssignmentPatchBound = true;
       els.reportList?.addEventListener("change", () => window.setTimeout(window.refreshChatAssignments, 0));
