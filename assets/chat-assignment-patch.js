@@ -381,6 +381,11 @@
     enrichChatMessage = window.enrichChatMessage;
     refreshChatAssignments = window.refreshChatAssignments;
     renderChatMessages = window.renderChatMessages;
+    if (typeof state !== "undefined" && typeof defaultSourceUrl !== "undefined" && (!state.sourceUrl || /\/wa\/(?:teamPortrait|groupPage)\?/i.test(state.sourceUrl))) {
+      state.sourceUrl = defaultSourceUrl;
+      if (typeof els !== "undefined" && els.sourceUrl) els.sourceUrl.value = defaultSourceUrl;
+      if (typeof save === "function") save();
+    }
   } catch (error) {
     console.warn("SGA chat assignment patch could not replace all functions:", error);
   }
