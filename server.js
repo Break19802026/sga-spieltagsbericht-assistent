@@ -11,6 +11,20 @@ const sessionSecret = process.env.SESSION_SECRET || appPassword || "local-dev-se
 const openaiApiKey = process.env.OPENAI_API_KEY || "";
 const openaiModel = process.env.OPENAI_MODEL || "gpt-5";
 const examplesPath = path.join(root, "examples", "reports.md");
+const supplementalYouthSources = [
+  {
+    label: "U8+",
+    url: "https://htv.liga.nu/cgi-bin/WebObjects/nuLigaTENDE.woa/wa/groupPage?championship=U8%2FU10+2026&group=11"
+  },
+  {
+    label: "Flex U10",
+    url: "https://htv.liga.nu/cgi-bin/WebObjects/nuLigaTENDE.woa/wa/groupPage?championship=U8%2FU10+2026&group=83"
+  },
+  {
+    label: "U10",
+    url: "https://htv.liga.nu/cgi-bin/WebObjects/nuLigaTENDE.woa/wa/groupPage?championship=U8%2FU10+2026&group=55"
+  }
+];
 
 function send(res, status, body, type = "application/json; charset=utf-8") {
   const headers = { "Content-Type": type };
@@ -174,7 +188,7 @@ function extractCells(rowHtml) {
   }));
 }
 
-function parseReports(html, baseUrl, from, to) {
+function parseReports(html, baseUrl, from, to, options = {}) {
   const rows = [...html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].map(match => match[1]);
   const reports = [];
   let lastDateTime = null;
@@ -194,17 +208,23 @@ function parseReports(html, baseUrl, from, to) {
     const linkIndex = cells.findIndex(cell => /meetingReport/i.test(cell.html));
     const beforeLink = linkIndex >= 0 ? cells.slice(0, linkIndex) : cells;
     const leagueIndex = beforeLink.findIndex(cell => /(^|\s)([DHU]\d{0,2}|Damen|Herren|Gemischt|Junior|Juniorinnen)/i.test(cell.text));
-    const league = leagueIndex >= 0 ? beforeLink[leagueIndex].text : "";
-    const home = leagueIndex >= 0 ? beforeLink[leagueIndex + 1]?.text || "" : "";
-    const guest = leagueIndex >= 0 ? beforeLink[leagueIndex + 2]?.text || "" : "";
-    const result = leagueIndex >= 0 ? beforeLink[leagueIndex + 3]?.text || "" : "";
-    const sets = leagueIndex >= 0 ? beforeLink[leagueIndex + 4]?.text || "" : "";
-    const games = leagueIndex >= 0 ? beforeLink[leagueIndex + 5]?.text || "" : "";
+    const dateIndex = dateCell ? beforeLink.indexOf(dateCell) : -1;
+    const fallbackCells = beforeLink
+      .slice(dateIndex >= 0 ? dateIndex + 1 : 0)
+      .map(cell => cell.text)
+      .filter(Boolean);
+    const league = leagueIndex >= 0 ? beforeLink[leagueIndex].text : options.defaultLeague || "";
+    const home = leagueIndex >= 0 ? beforeLink[leagueIndex + 1]?.text || "" : fallbackCells[0] || "";
+    const guest = leagueIndex >= 0 ? beforeLink[leagueIndex + 2]?.text || "" : fallbackCells[1] || "";
+    const result = leagueIndex >= 0 ? beforeLink[leagueIndex + 3]?.text || "" : fallbackCells[2] || "";
+    const sets = leagueIndex >= 0 ? beforeLink[leagueIndex + 4]?.text || "" : fallbackCells[3] || "";
+    const games = leagueIndex >= 0 ? beforeLink[leagueIndex + 5]?.text || "" : fallbackCells[4] || "";
     const url = absoluteUrl(baseUrl, hrefMatch[1]);
     const id = new URL(url).searchParams.get("meeting") || url;
 
     reports.push({
       id,
+      sourceLabel: options.sourceLabel || "",
       date: currentDateTime?.date || "",
       time: currentDateTime?.time || "",
       dateLabel: currentDateTime?.label || "",
@@ -243,9 +263,39 @@ async function handleDiscover(req, res, url) {
   if (!sourceUrl) return send(res, 400, { error: "Bitte einen nuLiga-Begegnungslink angeben." });
 
   try {
-    const html = await fetchText(sourceUrl);
-    const reports = parseReports(html, sourceUrl, from, to);
-    send(res, 200, { reports });
+    const sources = [
+      { url: sourceUrl, label: "" },
+      ...supplementalYouthSources
+    ];
+    const uniqueSources = [];
+    const seenUrls = new Set();
+    for (const source of sources) {
+      if (seenUrls.has(source.url)) continue;
+      seenUrls.add(source.url);
+      uniqueSources.push(source);
+    }
+
+    const reports = [];
+    const warnings = [];
+    for (const source of uniqueSources) {
+      try {
+        const html = await fetchText(source.url);
+        reports.push(...parseReports(html, source.url, from, to, {
+          defaultLeague: source.label,
+          sourceLabel: source.label
+        }));
+      } catch (error) {
+        if (source.url === sourceUrl) throw error;
+        warnings.push(`${source.label}: ${error.message || "konnte nicht geladen werden"}`);
+      }
+    }
+
+    const byId = new Map();
+    for (const report of reports) byId.set(report.id, report);
+    send(res, 200, {
+      reports: [...byId.values()].sort((a, b) => String(a.date + a.time).localeCompare(String(b.date + b.time))),
+      warnings
+    });
   } catch (error) {
     send(res, 502, { error: error.message || "nuLiga konnte nicht geladen werden." });
   }
