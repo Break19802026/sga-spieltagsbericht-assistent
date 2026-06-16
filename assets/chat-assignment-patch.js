@@ -233,7 +233,7 @@
       .section-source-box{border:1px solid #dbe3ed;border-radius:8px;background:#fff;padding:12px}
       .section-source-box h5{margin:0 0 8px;font-size:13px}.source-table-wrap{overflow-x:auto}
       .source-table{width:100%;border-collapse:collapse;font-size:13px}.source-table th,.source-table td{border-bottom:1px solid #e2e8f0;padding:7px 8px;text-align:left;vertical-align:top}.source-table th{color:#475569;background:#f1f5f9;font-weight:800}
-      .nuliga-detail-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}.nuliga-detail-table th,.nuliga-detail-table td{border-bottom:1px solid #d5dee2;padding:4px 6px;text-align:left;vertical-align:top}.nuliga-detail-table th{font-size:11px;font-weight:700;background:#f5f8f9;color:#0f2933}.nuliga-detail-table .section-row td{border-bottom:0;background:#fff;font-size:14px;font-weight:900;color:#111;padding:10px 0 3px}.nuliga-detail-table .match-row td{background:#d9e3e4}.nuliga-detail-table .summary-row td{background:#eef3f3;font-weight:900}.nuliga-detail-table .grand-row td{background:#fff;font-weight:900;border-bottom:0;padding-top:10px}.nuliga-detail-table .player-cell{font-weight:800;color:#235d61}.nuliga-detail-table .num{white-space:nowrap;text-align:right}
+      .nuliga-detail-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px;background:#fff}.nuliga-detail-table th,.nuliga-detail-table td{border-bottom:1px solid #e5e7eb;padding:4px 6px;text-align:left;vertical-align:top}.nuliga-detail-table th{font-size:11px;font-weight:800;background:#f8fafc;color:#334155}.nuliga-detail-table .section-row td{border-bottom:1px solid #e2e8f0;background:#fff;font-size:13px;font-weight:900;color:#0f172a;padding:10px 0 4px}.nuliga-detail-table .match-row td{background:#fff}.nuliga-detail-table .match-row:nth-child(even) td{background:#f8fafc}.nuliga-detail-table .summary-row td{background:#f1f5f9;font-weight:900}.nuliga-detail-table .grand-row td{background:#fff;font-weight:900;border-bottom:0;padding-top:10px}.nuliga-detail-table .player-cell{font-weight:750;color:#0f172a}.nuliga-detail-table .num{white-space:nowrap;text-align:right}
       .source-detail{margin-top:8px}.source-detail summary{cursor:pointer;color:#075985;font-weight:800}.source-detail pre,.chat-source{white-space:pre-wrap;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;padding:10px;max-height:220px;overflow:auto;font-size:12px}
     `;
     document.head.appendChild(style);
@@ -307,6 +307,22 @@
     return String(value || "").replace(/\*\*/g, "").replace(/:+$/g, "").replace(/\s+/g, " ").trim();
   }
 
+  function plainReviewText(value) {
+    return String(value || "")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/p\s*>/gi, "\n\n")
+      .replace(/<\/(?:div|li|h[1-6])\s*>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, "\"")
+      .replace(/&#39;/g, "'")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
   function rawTextFor(report) {
     if (!report?.url || !state.copiedData) return "";
     return String(state.copiedData).split(/\n---\n/g).find(block => block.includes(report.url)) || "";
@@ -327,18 +343,21 @@
   function chatFor(section, sources) {
     const keys = new Set(sources.map(item => reportKeySafe(item.report, item.index)));
     const tokens = norm(section.label).split(" ").filter(token => token.length > 2);
+    const bestReportScore = text => sources.reduce((best, { report }) => Math.max(best, scoreReport(text || "", report)), 0);
     const liveMessages = (state.chatMessages || []).filter(message => message.selected).map(message => {
       if (message.manualReportKey && keys.has(message.manualReportKey)) return { message, score: 300 };
       if ((message.possibleReportKeys || []).some(key => keys.has(key))) return { message, score: 220 };
       const text = norm(message.text);
       const tokenHit = tokens.length && tokens.some(token => text.includes(token));
-      const reportHit = sources.some(({ report }) => scoreReport(message.text || "", report) > 0);
-      return tokenHit || reportHit ? { message, score: (reportHit ? 100 : 0) + (tokenHit ? 20 : 0) } : null;
+      const reportScore = bestReportScore(message.text);
+      const reportHit = reportScore >= 120;
+      return reportHit ? { message, score: reportScore + (tokenHit ? 20 : 0) } : null;
     });
     const noteMessages = String(state.teamNotes || "").split(/\n---\n/g).map(text => text.trim()).filter(text => text.length > 20).map((text, index) => {
       const tokenHit = tokens.length && tokens.some(token => norm(text).includes(token));
-      const reportHit = sources.some(({ report }) => scoreReport(text, report) > 0);
-      return tokenHit || reportHit ? { message: { id: `note-${index}`, text, selected: true }, score: (reportHit ? 90 : 0) + (tokenHit ? 15 : 0) } : null;
+      const reportScore = bestReportScore(text);
+      const reportHit = reportScore >= 120;
+      return reportHit ? { message: { id: `note-${index}`, text, selected: true }, score: reportScore + (tokenHit ? 15 : 0) } : null;
     });
     const seen = new Set();
     return [...liveMessages, ...noteMessages]
@@ -451,7 +470,9 @@
   function nextRowIndex(tokens, start, summaryLabel) {
     for (let index = start; index < tokens.length; index += 1) {
       if (tokens[index] === summaryLabel || tokens[index] === "Gesamt") return index;
-      if (/^\d+$/.test(tokens[index]) && /^\d+$/.test(tokens[index + 1] || "") && tokens.slice(index + 1, index + 5).some(isNameToken) && index > start + 5) return index;
+      const looksLikeSingleRow = /^\d+$/.test(tokens[index]) && isNameToken(tokens[index + 1] || "") && /^\d+$/.test(tokens[index + 2] || "") && isNameToken(tokens[index + 3] || "");
+      const looksLikeDoubleRow = /^\d+$/.test(tokens[index]) && /^\d+$/.test(tokens[index + 1] || "") && tokens.slice(index + 1, index + 6).some(isNameToken);
+      if ((looksLikeSingleRow || looksLikeDoubleRow) && index > start + 3) return index;
     }
     return tokens.length;
   }
@@ -474,19 +495,19 @@
     const rows = [];
     let index = start;
     while (index < end) {
-      if (!/^\d+$/.test(tokens[index]) || !/^\d+$/.test(tokens[index + 1] || "") || !isNameToken(tokens[index + 2] || "")) {
+      if (!/^\d+$/.test(tokens[index]) || !isNameToken(tokens[index + 1] || "") || !/^\d+$/.test(tokens[index + 2] || "") || !isNameToken(tokens[index + 3] || "")) {
         index += 1;
         continue;
       }
-      const rowEnd = nextRowIndex(tokens, index + 5, "Einzel");
-      const tail = tokens.slice(index + 5, rowEnd);
+      const rowEnd = nextRowIndex(tokens, index + 4, "Einzel");
+      const tail = tokens.slice(index + 4, rowEnd);
       rows.push({
         type: "match",
         no: tokens[index],
-        homeNo: tokens[index + 1],
-        homePlayers: [cleanPlayer(tokens[index + 2])],
-        guestNo: tokens[index + 3] || "",
-        guestPlayers: [cleanPlayer(tokens[index + 4])],
+        homeNo: tokens[index],
+        homePlayers: [cleanPlayer(tokens[index + 1])],
+        guestNo: tokens[index + 2] || "",
+        guestPlayers: [cleanPlayer(tokens[index + 3])],
         ...parseSetAndSummary(tail)
       });
       index = rowEnd;
@@ -515,12 +536,15 @@
       const midpoint = Math.ceil(names.length / 2);
       const homeNames = names.slice(0, midpoint || 2);
       const guestNames = names.slice(midpoint || 2);
+      const homeNo = homeNames.map((_, idx) => numbers[idx] || "").filter(Boolean);
+      const guestStart = Math.max(0, numbers.length - guestNames.length);
+      const guestNo = guestNames.map((_, idx) => numbers[guestStart + idx] || "").filter(Boolean);
       rows.push({
         type: "match",
         no: tokens[index],
-        homeNo: numbers.slice(0, homeNames.length).join("<br>"),
+        homeNo: homeNo.join("<br>"),
         homePlayers: homeNames,
-        guestNo: numbers.slice(homeNames.length, homeNames.length + guestNames.length).join("<br>"),
+        guestNo: guestNo.join("<br>"),
         guestPlayers: guestNames,
         ...parseSetAndSummary(rowTokens.slice(firstScore))
       });
@@ -590,14 +614,15 @@
     list.innerHTML = sections.map((section, index) => {
       const sources = section.type === "team" ? sourceReportsFor(section) : [];
       const chats = chatFor(section, sources);
-      return `<article class="section-review-card ${escape(section.status || "open")}"><h4>${escape(section.label)} <span class="pill">${section.status === "accepted" ? "übernommen" : section.status === "excluded" ? "nicht verwenden" : "offen"}</span></h4><div class="section-review-grid"><div><label class="field"><span>Text prüfen und bearbeiten</span><textarea class="section-review-editor" data-section-text="${index}">${escape(section.editedText || section.text || "")}</textarea></label></div><div class="section-source-box"><h5>Quellenprüfung: Spielbericht</h5>${sourceTable(sources)}<h5 style="margin-top:12px">Quellenprüfung: Einzel und Doppel</h5>${matchDetailTable(sources)}${sourceDetails(sources)}<h5 style="margin-top:12px">Zugeordnete Chat-/Zusatzinfos</h5>${chats.length ? chats.map(message => `<div class="chat-source">${escape(message.text)}</div>`).join("") : `<p class="section-review-help">Keine zugeordnete Chatnachricht für diesen Abschnitt.</p>`}</div><div class="actions"><button class="btn" type="button" data-section-action="accept" data-section-index="${index}">Übernehmen</button><button class="btn secondary" type="button" data-section-action="exclude" data-section-index="${index}">Nicht verwenden</button></div></div></article>`;
+      const sourceBox = section.type === "team" ? `<div class="section-source-box"><h5>Quellenprüfung: Spielbericht</h5>${sourceTable(sources)}<h5 style="margin-top:12px">Quellenprüfung: Einzel und Doppel</h5>${matchDetailTable(sources)}${sourceDetails(sources)}<h5 style="margin-top:12px">Zugeordnete Chat-/Zusatzinfos</h5>${chats.length ? chats.map(message => `<div class="chat-source">${escape(message.text)}</div>`).join("") : `<p class="section-review-help">Keine zugeordnete Chatnachricht für diesen Abschnitt.</p>`}</div>` : "";
+      return `<article class="section-review-card ${escape(section.status || "open")}"><h4>${escape(section.label)} <span class="pill">${section.status === "accepted" ? "übernommen" : section.status === "excluded" ? "nicht verwenden" : "offen"}</span></h4><div class="section-review-grid"><div><label class="field"><span>Text prüfen und bearbeiten</span><textarea class="section-review-editor" data-section-text="${index}">${escape(plainReviewText(section.editedText || section.text || ""))}</textarea></label></div>${sourceBox}<div class="actions"><button class="btn" type="button" data-section-action="accept" data-section-index="${index}">Übernehmen</button><button class="btn secondary" type="button" data-section-action="exclude" data-section-index="${index}">Nicht verwenden</button></div></div></article>`;
     }).join("");
   }
 
   function saveSectionInputs() {
     (state.sectionReviews || []).forEach((section, index) => {
       const text = document.querySelector(`[data-section-text="${index}"]`);
-      if (text) section.editedText = text.value;
+      if (text) section.editedText = plainReviewText(text.value);
     });
     save();
   }
