@@ -230,7 +230,6 @@
       .section-review-card.excluded{border-color:#fecaca;background:#fef2f2;opacity:.82}
       .section-review-grid{display:grid;grid-template-columns:1fr;gap:12px}
       .section-review-editor{width:100%;min-height:130px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:12px}
-      .section-review-note{min-height:70px;margin-top:8px}
       .section-source-box{border:1px solid #dbe3ed;border-radius:8px;background:#fff;padding:12px}
       .section-source-box h5{margin:0 0 8px;font-size:13px}.source-table-wrap{overflow-x:auto}
       .source-table{width:100%;border-collapse:collapse;font-size:13px}.source-table th,.source-table td{border-bottom:1px solid #e2e8f0;padding:7px 8px;text-align:left;vertical-align:top}.source-table th{color:#475569;background:#f1f5f9;font-weight:800}
@@ -327,12 +326,14 @@
   function chatFor(section, sources) {
     const keys = new Set(sources.map(item => reportKeySafe(item.report, item.index)));
     const tokens = norm(section.label).split(" ").filter(token => token.length > 2);
-    return (state.chatMessages || []).filter(message => message.selected).filter(message => {
-      if (message.manualReportKey && keys.has(message.manualReportKey)) return true;
-      if ((message.possibleReportKeys || []).some(key => keys.has(key))) return true;
+    return (state.chatMessages || []).filter(message => message.selected).map(message => {
+      if (message.manualReportKey && keys.has(message.manualReportKey)) return { message, score: 300 };
+      if ((message.possibleReportKeys || []).some(key => keys.has(key))) return { message, score: 220 };
       const text = norm(message.text);
-      return tokens.length && tokens.some(token => text.includes(token));
-    }).slice(0, 4);
+      const tokenHit = tokens.length && tokens.some(token => text.includes(token));
+      const reportHit = sources.some(({ report }) => scoreReport(message.text || "", report) > 0);
+      return tokenHit || reportHit ? { message, score: (reportHit ? 100 : 0) + (tokenHit ? 20 : 0) } : null;
+    }).filter(Boolean).sort((a, b) => b.score - a.score).map(item => item.message).slice(0, 4);
   }
 
   function parseSections(text) {
@@ -417,6 +418,36 @@
     return `<div class="source-table-wrap"><table class="source-table"><thead><tr><th>Datum</th><th>Liga</th><th>Mannschaft 1</th><th>Mannschaft 2</th><th>Ergebnis</th></tr></thead><tbody>${sources.map(({ report }) => `<tr><td>${escape(report.dateLabel || "")}</td><td>${escape(report.league || "")}</td><td>${escape(report.home || "")}</td><td>${escape(report.guest || "")}</td><td>${escape(report.result || "")}</td></tr>`).join("")}</tbody></table></div>`;
   }
 
+  function parseMatchRows(raw) {
+    const lines = String(raw || "").split(/\n+/).map(line => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+    const rows = [];
+    const scoreRe = /(\d{1,2})\s*:\s*(\d{1,2})(?:\s*\((\d+)\))?/g;
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      const scores = [...line.matchAll(scoreRe)].map(match => match[0].replace(/\s+/g, ""));
+      if (!scores.length || !/[A-ZÄÖÜ][A-Za-zÄÖÜäöüß.' -]{2,}/.test(line)) continue;
+      const beforeScore = line.slice(0, line.search(scoreRe)).replace(/^(Einzel|Doppel|[1-6]\.\?\s*(?:Einzel|Doppel)?|Pos\.\?\s*\d+)\s*[:.-]?\s*/i, "").trim();
+      const players = beforeScore
+        .split(/\s+(?:gegen|vs\.\?|\/|-)\s+/i)
+        .map(part => part.replace(/\b(SG Arheilgen|TC|Tennisclub|MSG|STG)\b.*$/i, "").trim())
+        .filter(Boolean);
+      rows.push({
+        player1: players[0] || beforeScore || "Spieler/in SGA",
+        player2: players[1] || "",
+        set1: scores[0] || "",
+        set2: scores[1] || "",
+        set3: scores[2] || ""
+      });
+    }
+    return rows.slice(0, 12);
+  }
+
+  function matchDetailTable(sources) {
+    const rows = sources.flatMap(({ report }) => parseMatchRows(rawTextFor(report)));
+    if (!rows.length) return `<p class="section-review-help">Keine Einzel-/Doppelzeilen sicher erkannt. Bitte bei Bedarf den Rohdatenblock aufklappen.</p>`;
+    return `<div class="source-table-wrap"><table class="source-table"><thead><tr><th>Spieler 1</th><th>Spieler 2</th><th>Ergebnis Satz 1</th><th>Ergebnis Satz 2</th><th>Ergebnis Satz 3</th></tr></thead><tbody>${rows.map(row => `<tr><td>${escape(row.player1)}</td><td>${escape(row.player2)}</td><td>${escape(row.set1)}</td><td>${escape(row.set2)}</td><td>${escape(row.set3)}</td></tr>`).join("")}</tbody></table></div>`;
+  }
+
   function sourceDetails(sources) {
     return sources.map(({ report }) => {
       const raw = rawTextFor(report);
@@ -440,78 +471,40 @@
     list.innerHTML = sections.map((section, index) => {
       const sources = section.type === "team" ? sourceReportsFor(section) : [];
       const chats = chatFor(section, sources);
-      return `<article class="section-review-card ${escape(section.status || "open")}"><h4>${escape(section.label)} <span class="pill">${section.status === "accepted" ? "übernommen" : section.status === "excluded" ? "nicht verwenden" : "offen"}</span></h4><div class="section-review-grid"><div><label class="field"><span>Text prüfen und bearbeiten</span><textarea class="section-review-editor" data-section-text="${index}">${escape(section.editedText || section.text || "")}</textarea></label></div><div class="section-source-box"><h5>Quellenprüfung: Spielbericht</h5>${sourceTable(sources)}${sourceDetails(sources)}<h5 style="margin-top:12px">Zugeordnete Chat-/Zusatzinfos</h5>${chats.length ? chats.map(message => `<div class="chat-source">${escape(message.text)}</div>`).join("") : `<p class="section-review-help">Keine zugeordnete Chatnachricht für diesen Abschnitt.</p>`}</div><div><label class="field"><span>Hinweis für neue Formulierung</span><textarea class="section-review-note" data-section-note="${index}" placeholder="Optional: konkrete Korrektur oder gewünschte Änderung.">${escape(section.note || "")}</textarea></label><div class="actions"><button class="btn" type="button" data-section-action="accept" data-section-index="${index}">Übernehmen</button><button class="btn secondary" type="button" data-section-action="edit" data-section-index="${index}">Überarbeiten</button><button class="btn secondary" type="button" data-section-action="rewrite" data-section-index="${index}">Mit Hinweis neu formulieren</button><button class="btn secondary" type="button" data-section-action="exclude" data-section-index="${index}">Nicht verwenden</button></div></div></div></article>`;
+      return `<article class="section-review-card ${escape(section.status || "open")}"><h4>${escape(section.label)} <span class="pill">${section.status === "accepted" ? "übernommen" : section.status === "excluded" ? "nicht verwenden" : "offen"}</span></h4><div class="section-review-grid"><div><label class="field"><span>Text prüfen und bearbeiten</span><textarea class="section-review-editor" data-section-text="${index}">${escape(section.editedText || section.text || "")}</textarea></label></div><div class="section-source-box"><h5>Quellenprüfung: Spielbericht</h5>${sourceTable(sources)}<h5 style="margin-top:12px">Quellenprüfung: Einzel und Doppel</h5>${matchDetailTable(sources)}${sourceDetails(sources)}<h5 style="margin-top:12px">Zugeordnete Chat-/Zusatzinfos</h5>${chats.length ? chats.map(message => `<div class="chat-source">${escape(message.text)}</div>`).join("") : `<p class="section-review-help">Keine zugeordnete Chatnachricht für diesen Abschnitt.</p>`}</div><div class="actions"><button class="btn" type="button" data-section-action="accept" data-section-index="${index}">Übernehmen</button><button class="btn secondary" type="button" data-section-action="exclude" data-section-index="${index}">Nicht verwenden</button></div></div></article>`;
     }).join("");
   }
 
   function saveSectionInputs() {
     (state.sectionReviews || []).forEach((section, index) => {
       const text = document.querySelector(`[data-section-text="${index}"]`);
-      const note = document.querySelector(`[data-section-note="${index}"]`);
       if (text) section.editedText = text.value;
-      if (note) section.note = note.value;
     });
     save();
   }
 
-  function composeReviewedReport() {
-    saveSectionInputs();
-    const text = (state.sectionReviews || []).filter(section => section.status !== "excluded").map(section => (section.editedText || section.text || "").trim()).filter(Boolean).join("\n\n");
-    if (text) {
-      state.generatedText = text;
-      if (els.generatedOutput) els.generatedOutput.value = text;
-      save();
-      showToast("Geprüfter Bericht zusammengesetzt");
-    }
-    renderSectionReview();
-  }
-
-  async function rewriteSection(index) {
+  function applySectionToMainText(index) {
     saveSectionInputs();
     const section = state.sectionReviews?.[index];
-    if (!section) return;
-    if (typeof requestGeneratePassword === "function" && !requestGeneratePassword("section-review")) {
-      window.__sgaPendingSectionRewrite = index;
-      return;
+    const edited = (section?.editedText || section?.text || "").trim();
+    if (!section || !edited) return;
+    const current = (els.generatedOutput?.value || state.generatedText || "").trim();
+    let next = current;
+    const original = String(section.text || "").trim();
+    if (original && current.includes(original)) {
+      next = current.replace(original, edited);
+    } else if (!current.includes(edited)) {
+      next = [current, edited].filter(Boolean).join("\n\n");
     }
-    const status = document.querySelector("#sectionReviewStatus");
-    const sources = sourceReportsFor(section);
-    const chats = chatFor(section, sources);
-    const prompt = `Formuliere nur den folgenden Abschnitt eines SGA-Tennisberichts neu.
-
-Regeln:
-- Gib ausschließlich den überarbeiteten Abschnitt aus.
-- Erfinde keine Fakten, Namen, Ergebnisse oder Termine.
-- Bewahre das Format mit fett gesetztem Einstieg "Mannschaft - Liga:" beziehungsweise "Vorschau:".
-- Setze den Nutzerhinweis vorrangig um.
-
-Aktueller Abschnitt:
-${section.editedText || section.text}
-
-Nutzerhinweis:
-${section.note || "[Kein zusätzlicher Hinweis]"}
-
-Spielbericht-Quellen:
-${sources.map(({ report }) => `${reportLabelSafe(report)}\n${rawTextFor(report)}`).join("\n\n---\n\n") || "[Keine passende Quelle]"}
-
-Chat-/Zusatzinfos:
-${chats.map(message => message.text).join("\n\n---\n\n") || "[Keine Chatnachricht]"}`;
-    if (status) status.textContent = "Abschnitt wird neu formuliert ...";
-    try {
-      const response = await fetch(`${apiBase}/api/generate`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt }) });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Der Abschnitt konnte nicht neu formuliert werden.");
-      section.editedText = payload.text || section.editedText;
-      section.status = "open";
-      if (status) status.textContent = "Abschnitt wurde neu formuliert. Bitte prüfen und übernehmen.";
-      save();
-      renderSectionReview();
-    } catch (error) {
-      if (status) {
-        status.textContent = error.message || "Der Abschnitt konnte nicht neu formuliert werden.";
-        status.classList.add("error");
-      }
-    }
+    section.text = edited;
+    section.editedText = edited;
+    section.status = "accepted";
+    state.generatedText = next;
+    if (els.generatedOutput) els.generatedOutput.value = next;
+    state.sectionReviewSourceText = next;
+    save();
+    showToast("Abschnitt oben im Gesamttext übernommen");
+    renderSectionReview();
   }
 
   function installSectionWorkflow() {
@@ -525,10 +518,10 @@ ${chats.map(message => message.text).join("\n\n---\n\n") || "[Keine Chatnachrich
     const panel = document.createElement("div");
     panel.id = "sectionReviewWorkflow";
     panel.className = "section-review-workflow";
-    panel.innerHTML = `<h3>Mannschaftsprüfung</h3><p class="section-review-help">Prüfe den Bericht Abschnitt für Abschnitt. Links kannst du den Text bearbeiten, rechts siehst du die zugeordneten Spielberichte als Tabelle sowie passende Chat-/Zusatzinfos.</p><div class="actions"><button class="btn secondary" id="prepareSectionReview" type="button">Abschnitte neu vorbereiten</button><button class="btn" id="composeReviewedReport" type="button">Geprüften Gesamtbericht zusammensetzen</button></div><div class="section-review-summary" id="sectionReviewSummary"></div><div class="status" id="sectionReviewStatus"></div><div class="section-review-list" id="sectionReviewList"></div>`;
+    panel.innerHTML = `<h3>Mannschaftsprüfung</h3><p class="section-review-help">Prüfe den Bericht Abschnitt für Abschnitt. Bearbeitest du den Text und klickst auf „Übernehmen“, wird genau dieser Abschnitt oben im Gesamttext aktualisiert.</p><div class="actions"><button class="btn secondary" id="prepareSectionReview" type="button">Abschnitte neu vorbereiten</button></div><div class="section-review-summary" id="sectionReviewSummary"></div><div class="status" id="sectionReviewStatus"></div><div class="section-review-list" id="sectionReviewList"></div>`;
     generatedBox.insertAdjacentElement("afterend", panel);
     panel.addEventListener("input", event => {
-      if (event.target.matches("[data-section-text], [data-section-note]")) saveSectionInputs();
+      if (event.target.matches("[data-section-text]")) saveSectionInputs();
     });
     panel.addEventListener("click", async event => {
       if (event.target.closest("#prepareSectionReview")) {
@@ -537,26 +530,17 @@ ${chats.map(message => message.text).join("\n\n---\n\n") || "[Keine Chatnachrich
         showToast("Abschnitte vorbereitet");
         return;
       }
-      if (event.target.closest("#composeReviewedReport")) {
-        composeReviewedReport();
-        return;
-      }
       const button = event.target.closest("[data-section-action]");
       if (!button) return;
       const index = Number(button.dataset.sectionIndex);
       const action = button.dataset.sectionAction;
       if (!state.sectionReviews?.[index]) return;
       saveSectionInputs();
-      if (action === "accept") state.sectionReviews[index].status = "accepted";
+      if (action === "accept") {
+        applySectionToMainText(index);
+        return;
+      }
       if (action === "exclude") state.sectionReviews[index].status = "excluded";
-      if (action === "edit") {
-        panel.querySelector(`[data-section-text="${index}"]`)?.focus();
-        return;
-      }
-      if (action === "rewrite") {
-        await rewriteSection(index);
-        return;
-      }
       save();
       renderSectionReview();
     });
@@ -574,20 +558,6 @@ ${chats.map(message => message.text).join("\n\n---\n\n") || "[Keine Chatnachrich
       els.generateReport?.removeEventListener("click", originalGenerate);
       els.generateReport?.addEventListener("click", generateReport);
       window.__sgaSectionWorkflowGeneratePatched = true;
-    }
-    if (!window.__sgaSectionWorkflowLoginPatched && typeof login === "function") {
-      const originalLogin = login;
-      login = async function loginWithSectionWorkflow(event) {
-        await originalLogin(event);
-        if (state.authenticated && Number.isInteger(window.__sgaPendingSectionRewrite)) {
-          const index = window.__sgaPendingSectionRewrite;
-          window.__sgaPendingSectionRewrite = null;
-          await rewriteSection(index);
-        }
-      };
-      els.loginForm?.removeEventListener("submit", originalLogin);
-      els.loginForm?.addEventListener("submit", login);
-      window.__sgaSectionWorkflowLoginPatched = true;
     }
   }
 
