@@ -212,6 +212,12 @@
     const style = document.createElement("style");
     style.id = "sga-section-review-styles";
     style.textContent = `
+      body{font-size:14px}
+      .panel{font-size:14px}
+      h1{font-size:clamp(28px,4.5vw,44px)}
+      h2{font-size:22px}
+      h3{font-size:15px}
+      .choice strong{font-size:18px}
       .chat-assignment-select{appearance:none;width:100%;margin-top:10px;padding:9px 12px;border:1px solid rgba(20,163,218,.35);border-radius:8px;background:#eef9fd;color:#12394a;font:inherit}
       .chat-assignment-hint{display:block;margin-top:8px;color:#3c6474;font-size:.88rem}
       .section-review-hidden{display:none!important}
@@ -222,14 +228,13 @@
       .section-review-card{border:1px solid #dbe3ed;border-radius:8px;background:#f8fafc;padding:14px}
       .section-review-card.accepted{border-color:#86efac;background:#ecfdf5}
       .section-review-card.excluded{border-color:#fecaca;background:#fef2f2;opacity:.82}
-      .section-review-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:14px}
-      .section-review-editor{width:100%;min-height:150px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:12px}
+      .section-review-grid{display:grid;grid-template-columns:1fr;gap:12px}
+      .section-review-editor{width:100%;min-height:130px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:12px}
       .section-review-note{min-height:70px;margin-top:8px}
       .section-source-box{border:1px solid #dbe3ed;border-radius:8px;background:#fff;padding:12px}
       .section-source-box h5{margin:0 0 8px;font-size:13px}.source-table-wrap{overflow-x:auto}
       .source-table{width:100%;border-collapse:collapse;font-size:13px}.source-table th,.source-table td{border-bottom:1px solid #e2e8f0;padding:7px 8px;text-align:left;vertical-align:top}.source-table th{color:#475569;background:#f1f5f9;font-weight:800}
       .source-detail{margin-top:8px}.source-detail summary{cursor:pointer;color:#075985;font-weight:800}.source-detail pre,.chat-source{white-space:pre-wrap;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;padding:10px;max-height:220px;overflow:auto;font-size:12px}
-      @media(max-width:820px){.section-review-grid{grid-template-columns:1fr}}
     `;
     document.head.appendChild(style);
   }
@@ -308,6 +313,10 @@
   }
 
   function sourceReportsFor(section) {
+    if (section.sourceKey) {
+      const report = (state.reports || []).find((item, index) => reportKeySafe(item, index) === section.sourceKey);
+      return report ? [{ report, index: state.reports.indexOf(report), score: 9999 }] : [];
+    }
     const reports = (state.reports || []).filter(report => report.selected);
     const base = reports.length ? reports : (state.reports || []);
     const scored = base.map((report, index) => ({ report, index, score: scoreReport(`${section.label} ${section.text}`, report) })).sort((a, b) => b.score - a.score);
@@ -344,6 +353,48 @@
     return sections;
   }
 
+  function teamLabelForReport(report) {
+    const league = String(report.league || "").trim();
+    if (league) return league;
+    const sgaTeam = [report.home, report.guest].find(team => /sg\s*arheilgen/i.test(team || ""));
+    return sgaTeam || "Mannschaft";
+  }
+
+  function teamReviewSectionsFromReports(parsedSections) {
+    const selectedReports = (state.reports || []).filter(report => report.selected);
+    const teamSections = parsedSections.filter(section => section.type === "team");
+    if (!selectedReports.length) return teamSections;
+
+    const usedSectionIds = new Set();
+    return selectedReports.map((report, index) => {
+      const reportKey = reportKeySafe(report, state.reports.indexOf(report));
+      const best = teamSections
+        .filter(section => !usedSectionIds.has(section.id))
+        .map(section => ({ section, score: scoreReport(`${section.label} ${section.text}`, report) }))
+        .sort((a, b) => b.score - a.score)[0];
+      if (best && best.score > 0) {
+        usedSectionIds.add(best.section.id);
+        return {
+          ...best.section,
+          id: `report-section-${index}`,
+          sourceKey: reportKey,
+          label: cleanLabel(best.section.label || teamLabelForReport(report))
+        };
+      }
+      const label = teamLabelForReport(report);
+      return {
+        id: `report-section-${index}`,
+        type: "team",
+        sourceKey: reportKey,
+        label,
+        text: `**${label}:** [Für diese ausgewählte Mannschaft wurde im generierten Bericht kein eindeutiger Absatz gefunden. Bitte hier den passenden Text ergänzen oder mit Hinweis neu formulieren.]`,
+        editedText: `**${label}:** `,
+        status: "open",
+        note: ""
+      };
+    });
+  }
+
   function ensureSectionState(force = false) {
     const text = (els.generatedOutput?.value || state.generatedText || "").trim();
     if (!text) {
@@ -352,7 +403,11 @@
       return;
     }
     if (!force && state.sectionReviewSourceText === text && state.sectionReviews?.length) return;
-    state.sectionReviews = parseSections(text);
+    const parsedSections = parseSections(text);
+    const introSections = parsedSections.filter(section => section.type === "intro");
+    const teamSections = teamReviewSectionsFromReports(parsedSections);
+    const otherSections = parsedSections.filter(section => !["intro", "team"].includes(section.type));
+    state.sectionReviews = [...introSections, ...teamSections, ...otherSections];
     state.sectionReviewSourceText = text;
     save();
   }
@@ -385,7 +440,7 @@
     list.innerHTML = sections.map((section, index) => {
       const sources = section.type === "team" ? sourceReportsFor(section) : [];
       const chats = chatFor(section, sources);
-      return `<article class="section-review-card ${escape(section.status || "open")}"><h4>${escape(section.label)} <span class="pill">${section.status === "accepted" ? "übernommen" : section.status === "excluded" ? "nicht verwenden" : "offen"}</span></h4><div class="section-review-grid"><div><label class="field"><span>Text prüfen und bearbeiten</span><textarea class="section-review-editor" data-section-text="${index}">${escape(section.editedText || section.text || "")}</textarea></label><label class="field"><span>Hinweis für Neuformulierung</span><textarea class="section-review-note" data-section-note="${index}" placeholder="Optional: konkrete Korrektur oder gewünschte Änderung.">${escape(section.note || "")}</textarea></label><div class="actions"><button class="btn" type="button" data-section-action="accept" data-section-index="${index}">Übernehmen</button><button class="btn secondary" type="button" data-section-action="edit" data-section-index="${index}">Überarbeiten</button><button class="btn secondary" type="button" data-section-action="rewrite" data-section-index="${index}">Mit Hinweis neu formulieren</button><button class="btn secondary" type="button" data-section-action="exclude" data-section-index="${index}">Nicht verwenden</button></div></div><div class="section-source-box"><h5>Quellenprüfung: Spielbericht</h5>${sourceTable(sources)}${sourceDetails(sources)}<h5 style="margin-top:12px">Zugeordnete Chat-/Zusatzinfos</h5>${chats.length ? chats.map(message => `<div class="chat-source">${escape(message.text)}</div>`).join("") : `<p class="section-review-help">Keine zugeordnete Chatnachricht für diesen Abschnitt.</p>`}</div></div></article>`;
+      return `<article class="section-review-card ${escape(section.status || "open")}"><h4>${escape(section.label)} <span class="pill">${section.status === "accepted" ? "übernommen" : section.status === "excluded" ? "nicht verwenden" : "offen"}</span></h4><div class="section-review-grid"><div><label class="field"><span>Text prüfen und bearbeiten</span><textarea class="section-review-editor" data-section-text="${index}">${escape(section.editedText || section.text || "")}</textarea></label></div><div class="section-source-box"><h5>Quellenprüfung: Spielbericht</h5>${sourceTable(sources)}${sourceDetails(sources)}<h5 style="margin-top:12px">Zugeordnete Chat-/Zusatzinfos</h5>${chats.length ? chats.map(message => `<div class="chat-source">${escape(message.text)}</div>`).join("") : `<p class="section-review-help">Keine zugeordnete Chatnachricht für diesen Abschnitt.</p>`}</div><div><label class="field"><span>Hinweis für neue Formulierung</span><textarea class="section-review-note" data-section-note="${index}" placeholder="Optional: konkrete Korrektur oder gewünschte Änderung.">${escape(section.note || "")}</textarea></label><div class="actions"><button class="btn" type="button" data-section-action="accept" data-section-index="${index}">Übernehmen</button><button class="btn secondary" type="button" data-section-action="edit" data-section-index="${index}">Überarbeiten</button><button class="btn secondary" type="button" data-section-action="rewrite" data-section-index="${index}">Mit Hinweis neu formulieren</button><button class="btn secondary" type="button" data-section-action="exclude" data-section-index="${index}">Nicht verwenden</button></div></div></div></article>`;
     }).join("");
   }
 
