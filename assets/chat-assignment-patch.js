@@ -426,9 +426,9 @@
       const line = lines[index];
       const scores = [...line.matchAll(scoreRe)].map(match => match[0].replace(/\s+/g, ""));
       if (!scores.length || !/[A-ZÄÖÜ][A-Za-zÄÖÜäöüß.' -]{2,}/.test(line)) continue;
-      const beforeScore = line.slice(0, line.search(scoreRe)).replace(/^(Einzel|Doppel|[1-6]\.\?\s*(?:Einzel|Doppel)?|Pos\.\?\s*\d+)\s*[:.-]?\s*/i, "").trim();
+      const beforeScore = line.slice(0, line.search(scoreRe)).replace(/^(Einzel|Doppel|[1-6][.)]?\s*(?:Einzel|Doppel)?|Pos[.]?\s*\d+)\s*[:.-]?\s*/i, "").trim();
       const players = beforeScore
-        .split(/\s+(?:gegen|vs\.\?|\/|-)\s+/i)
+        .split(/\s+(?:gegen|vs[.]?|\/|-)\s+/i)
         .map(part => part.replace(/\b(SG Arheilgen|TC|Tennisclub|MSG|STG)\b.*$/i, "").trim())
         .filter(Boolean);
       rows.push({
