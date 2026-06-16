@@ -9,7 +9,7 @@ const host = process.env.HOST || "0.0.0.0";
 const appPassword = process.env.APP_PASSWORD || "";
 const sessionSecret = process.env.SESSION_SECRET || appPassword || "local-dev-secret";
 const openaiApiKey = process.env.OPENAI_API_KEY || "";
-const openaiModel = process.env.OPENAI_MODEL || "gpt-5";
+const openaiModel = process.env.OPENAI_MODEL || "gpt-4.1";
 const examplesPath = path.join(root, "examples", "reports.md");
 const defaultClubMeetingsUrl = "https://htv.liga.nu/cgi-bin/WebObjects/nuLigaTENDE.woa/4/wa/clubMeetings?club=24783";
 const supplementalYouthSources = [
@@ -708,6 +708,11 @@ function serveStatic(req, res, url) {
         patchSource = fs.readFileSync(path.join(root, "assets", "chat-assignment-patch.js"), "utf8");
       } catch {
         patchSource = "";
+      }
+      try {
+        patchSource += `\n${fs.readFileSync(path.join(root, "assets", "docx-export-patch.js"), "utf8")}`;
+      } catch {
+        patchSource += "";
       }
       const closingScriptIndex = html.lastIndexOf("</script>");
       const patchedHtml = patchSource && closingScriptIndex >= 0
