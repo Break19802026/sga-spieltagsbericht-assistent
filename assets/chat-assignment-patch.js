@@ -233,6 +233,7 @@
       .section-source-box{border:1px solid #dbe3ed;border-radius:8px;background:#fff;padding:12px}
       .section-source-box h5{margin:0 0 8px;font-size:13px}.source-table-wrap{overflow-x:auto}
       .source-table{width:100%;border-collapse:collapse;font-size:13px}.source-table th,.source-table td{border-bottom:1px solid #e2e8f0;padding:7px 8px;text-align:left;vertical-align:top}.source-table th{color:#475569;background:#f1f5f9;font-weight:800}
+      .nuliga-detail-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}.nuliga-detail-table th,.nuliga-detail-table td{border-bottom:1px solid #d5dee2;padding:4px 6px;text-align:left;vertical-align:top}.nuliga-detail-table th{font-size:11px;font-weight:700;background:#f5f8f9;color:#0f2933}.nuliga-detail-table .section-row td{border-bottom:0;background:#fff;font-size:14px;font-weight:900;color:#111;padding:10px 0 3px}.nuliga-detail-table .match-row td{background:#d9e3e4}.nuliga-detail-table .summary-row td{background:#eef3f3;font-weight:900}.nuliga-detail-table .grand-row td{background:#fff;font-weight:900;border-bottom:0;padding-top:10px}.nuliga-detail-table .player-cell{font-weight:800;color:#235d61}.nuliga-detail-table .num{white-space:nowrap;text-align:right}
       .source-detail{margin-top:8px}.source-detail summary{cursor:pointer;color:#075985;font-weight:800}.source-detail pre,.chat-source{white-space:pre-wrap;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;padding:10px;max-height:220px;overflow:auto;font-size:12px}
     `;
     document.head.appendChild(style);
@@ -326,14 +327,31 @@
   function chatFor(section, sources) {
     const keys = new Set(sources.map(item => reportKeySafe(item.report, item.index)));
     const tokens = norm(section.label).split(" ").filter(token => token.length > 2);
-    return (state.chatMessages || []).filter(message => message.selected).map(message => {
+    const liveMessages = (state.chatMessages || []).filter(message => message.selected).map(message => {
       if (message.manualReportKey && keys.has(message.manualReportKey)) return { message, score: 300 };
       if ((message.possibleReportKeys || []).some(key => keys.has(key))) return { message, score: 220 };
       const text = norm(message.text);
       const tokenHit = tokens.length && tokens.some(token => text.includes(token));
       const reportHit = sources.some(({ report }) => scoreReport(message.text || "", report) > 0);
       return tokenHit || reportHit ? { message, score: (reportHit ? 100 : 0) + (tokenHit ? 20 : 0) } : null;
-    }).filter(Boolean).sort((a, b) => b.score - a.score).map(item => item.message).slice(0, 4);
+    });
+    const noteMessages = String(state.teamNotes || "").split(/\n---\n/g).map(text => text.trim()).filter(text => text.length > 20).map((text, index) => {
+      const tokenHit = tokens.length && tokens.some(token => norm(text).includes(token));
+      const reportHit = sources.some(({ report }) => scoreReport(text, report) > 0);
+      return tokenHit || reportHit ? { message: { id: `note-${index}`, text, selected: true }, score: (reportHit ? 90 : 0) + (tokenHit ? 15 : 0) } : null;
+    });
+    const seen = new Set();
+    return [...liveMessages, ...noteMessages]
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score)
+      .map(item => item.message)
+      .filter(message => {
+        const key = String(message.text || "").slice(0, 180);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 4);
   }
 
   function parseSections(text) {
@@ -418,34 +436,135 @@
     return `<div class="source-table-wrap"><table class="source-table"><thead><tr><th>Datum</th><th>Liga</th><th>Mannschaft 1</th><th>Mannschaft 2</th><th>Ergebnis</th></tr></thead><tbody>${sources.map(({ report }) => `<tr><td>${escape(report.dateLabel || "")}</td><td>${escape(report.league || "")}</td><td>${escape(report.home || "")}</td><td>${escape(report.guest || "")}</td><td>${escape(report.result || "")}</td></tr>`).join("")}</tbody></table></div>`;
   }
 
-  function parseMatchRows(raw) {
-    const lines = String(raw || "").split(/\n+/).map(line => line.replace(/\s+/g, " ").trim()).filter(Boolean);
-    const rows = [];
-    const scoreRe = /(\d{1,2})\s*:\s*(\d{1,2})(?:\s*\((\d+)\))?/g;
-    for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index];
-      const scores = [...line.matchAll(scoreRe)].map(match => match[0].replace(/\s+/g, ""));
-      if (!scores.length || !/[A-ZÄÖÜ][A-Za-zÄÖÜäöüß.' -]{2,}/.test(line)) continue;
-      const beforeScore = line.slice(0, line.search(scoreRe)).replace(/^(Einzel|Doppel|[1-6][.)]?\s*(?:Einzel|Doppel)?|Pos[.]?\s*\d+)\s*[:.-]?\s*/i, "").trim();
-      const players = beforeScore
-        .split(/\s+(?:gegen|vs[.]?|\/|-)\s+/i)
-        .map(part => part.replace(/\b(SG Arheilgen|TC|Tennisclub|MSG|STG)\b.*$/i, "").trim())
-        .filter(Boolean);
-      rows.push({
-        player1: players[0] || beforeScore || "Spieler/in SGA",
-        player2: players[1] || "",
-        set1: scores[0] || "",
-        set2: scores[1] || "",
-        set3: scores[2] || ""
-      });
+  function cleanPlayer(value) {
+    return String(value || "").replace(/\s+/g, " ").trim();
+  }
+
+  function isScoreToken(value) {
+    return /^\d{1,3}\s*:\s*\d{1,3}(?:\s*\(\d+\))?$/.test(String(value || "").trim());
+  }
+
+  function isNameToken(value) {
+    return /[A-ZÄÖÜ][A-Za-zÄÖÜäöüß.' -]{2,}/.test(String(value || "")) && !isScoreToken(value);
+  }
+
+  function nextRowIndex(tokens, start, summaryLabel) {
+    for (let index = start; index < tokens.length; index += 1) {
+      if (tokens[index] === summaryLabel || tokens[index] === "Gesamt") return index;
+      if (/^\d+$/.test(tokens[index]) && /^\d+$/.test(tokens[index + 1] || "") && tokens.slice(index + 1, index + 5).some(isNameToken) && index > start + 5) return index;
     }
-    return rows.slice(0, 12);
+    return tokens.length;
+  }
+
+  function parseSetAndSummary(tokens) {
+    const scoreTokens = tokens.filter(isScoreToken).map(token => token.replace(/\s+/g, ""));
+    const totals = scoreTokens.slice(-3);
+    const sets = scoreTokens.slice(0, Math.max(0, scoreTokens.length - 3));
+    return {
+      set1: sets[0] || "",
+      set2: sets[1] || "",
+      set3: sets[2] || "",
+      matchpoints: totals[0] || "",
+      sets: totals[1] || "",
+      games: totals[2] || ""
+    };
+  }
+
+  function parseSingles(tokens, start, end) {
+    const rows = [];
+    let index = start;
+    while (index < end) {
+      if (!/^\d+$/.test(tokens[index]) || !/^\d+$/.test(tokens[index + 1] || "") || !isNameToken(tokens[index + 2] || "")) {
+        index += 1;
+        continue;
+      }
+      const rowEnd = nextRowIndex(tokens, index + 5, "Einzel");
+      const tail = tokens.slice(index + 5, rowEnd);
+      rows.push({
+        type: "match",
+        no: tokens[index],
+        homeNo: tokens[index + 1],
+        homePlayers: [cleanPlayer(tokens[index + 2])],
+        guestNo: tokens[index + 3] || "",
+        guestPlayers: [cleanPlayer(tokens[index + 4])],
+        ...parseSetAndSummary(tail)
+      });
+      index = rowEnd;
+    }
+    return rows;
+  }
+
+  function parseDoubles(tokens, start, end) {
+    const rows = [];
+    let index = start;
+    while (index < end) {
+      if (!/^\d+$/.test(tokens[index])) {
+        index += 1;
+        continue;
+      }
+      const rowEnd = nextRowIndex(tokens, index + 1, "Doppel");
+      const rowTokens = tokens.slice(index + 1, rowEnd);
+      const firstScore = rowTokens.findIndex(isScoreToken);
+      if (firstScore < 0) {
+        index += 1;
+        continue;
+      }
+      const playerTokens = rowTokens.slice(0, firstScore);
+      const names = playerTokens.filter(isNameToken).map(cleanPlayer);
+      const numbers = playerTokens.filter(token => /^\d+$/.test(token));
+      const midpoint = Math.ceil(names.length / 2);
+      const homeNames = names.slice(0, midpoint || 2);
+      const guestNames = names.slice(midpoint || 2);
+      rows.push({
+        type: "match",
+        no: tokens[index],
+        homeNo: numbers.slice(0, homeNames.length).join("<br>"),
+        homePlayers: homeNames,
+        guestNo: numbers.slice(homeNames.length, homeNames.length + guestNames.length).join("<br>"),
+        guestPlayers: guestNames,
+        ...parseSetAndSummary(rowTokens.slice(firstScore))
+      });
+      index = rowEnd;
+    }
+    return rows;
+  }
+
+  function parseSummary(tokens, label) {
+    const index = tokens.indexOf(label);
+    if (index < 0) return null;
+    const values = tokens.slice(index + 1).filter(isScoreToken).slice(0, 3).map(token => token.replace(/\s+/g, ""));
+    return { type: "summary", label, matchpoints: values[0] || "", sets: values[1] || "", games: values[2] || "" };
+  }
+
+  function parseNuLigaDetail(raw, report) {
+    const tokens = String(raw || "").split(/\n+/).map(line => line.replace(/\s+/g, " ").trim()).filter(Boolean);
+    const singleStart = tokens.indexOf("Einzelspiele");
+    const singleEnd = tokens.indexOf("Einzel", singleStart + 1);
+    const doubleStart = tokens.indexOf("Doppelspiele");
+    const doubleEnd = tokens.indexOf("Doppel", doubleStart + 1);
+    const sections = [];
+    if (singleStart >= 0 && singleEnd > singleStart) {
+      sections.push({ title: "Einzelspiele", rows: [...parseSingles(tokens, singleStart + 1, singleEnd), parseSummary(tokens.slice(singleEnd), "Einzel")].filter(Boolean) });
+    }
+    if (doubleStart >= 0 && doubleEnd > doubleStart) {
+      sections.push({ title: "Doppelspiele", rows: [...parseDoubles(tokens, doubleStart + 1, doubleEnd), parseSummary(tokens.slice(doubleEnd), "Doppel")].filter(Boolean) });
+    }
+    const grand = parseSummary(tokens, "Gesamt");
+    return { home: report.home || "Mannschaft 1", guest: report.guest || "Mannschaft 2", sections, grand };
   }
 
   function matchDetailTable(sources) {
-    const rows = sources.flatMap(({ report }) => parseMatchRows(rawTextFor(report)));
-    if (!rows.length) return `<p class="section-review-help">Keine Einzel-/Doppelzeilen sicher erkannt. Bitte bei Bedarf den Rohdatenblock aufklappen.</p>`;
-    return `<div class="source-table-wrap"><table class="source-table"><thead><tr><th>Spieler 1</th><th>Spieler 2</th><th>Ergebnis Satz 1</th><th>Ergebnis Satz 2</th><th>Ergebnis Satz 3</th></tr></thead><tbody>${rows.map(row => `<tr><td>${escape(row.player1)}</td><td>${escape(row.player2)}</td><td>${escape(row.set1)}</td><td>${escape(row.set2)}</td><td>${escape(row.set3)}</td></tr>`).join("")}</tbody></table></div>`;
+    const source = sources[0];
+    const parsed = source ? parseNuLigaDetail(rawTextFor(source.report), source.report) : null;
+    if (!parsed || !parsed.sections.some(section => section.rows.length)) return `<p class="section-review-help">Keine Einzel-/Doppelzeilen sicher erkannt. Bitte bei Bedarf den Rohdatenblock aufklappen.</p>`;
+    const sectionRows = parsed.sections.map(section => {
+      const rows = section.rows.map(row => row.type === "summary"
+        ? `<tr class="summary-row"><td colspan="4">${escape(row.label)}</td><td></td><td></td><td></td><td class="num">${escape(row.matchpoints)}</td><td class="num">${escape(row.sets)}</td><td class="num">${escape(row.games)}</td></tr>`
+        : `<tr class="match-row"><td class="num">${escape(row.no)}</td><td class="num">${row.homeNo || ""}</td><td class="player-cell">${row.homePlayers.map(escape).join("<br>")}</td><td class="num">${row.guestNo || ""}</td><td class="player-cell">${row.guestPlayers.map(escape).join("<br>")}</td><td class="num">${escape(row.set1)}</td><td class="num">${escape(row.set2)}</td><td class="num">${escape(row.set3)}</td><td class="num">${escape(row.matchpoints)}</td><td class="num">${escape(row.sets)}</td><td class="num">${escape(row.games)}</td></tr>`).join("");
+      return `<tr class="section-row"><td colspan="11">${escape(section.title)}</td></tr><tr><th></th><th colspan="2">${escape(parsed.home)}</th><th colspan="2">${escape(parsed.guest)}</th><th>1.Satz</th><th>2.Satz</th><th>3.Satz</th><th>Matchpunkte</th><th>Sätze</th><th>Spiele</th></tr>${rows}`;
+    }).join("");
+    const grandRow = parsed.grand ? `<tr class="grand-row"><td colspan="7">Gesamt</td><td></td><td class="num">${escape(parsed.grand.matchpoints)}</td><td class="num">${escape(parsed.grand.sets)}</td><td class="num">${escape(parsed.grand.games)}</td></tr>` : "";
+    return `<div class="source-table-wrap"><table class="nuliga-detail-table">${sectionRows}${grandRow}</table></div>`;
   }
 
   function sourceDetails(sources) {
