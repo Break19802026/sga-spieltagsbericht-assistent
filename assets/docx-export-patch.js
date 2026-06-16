@@ -116,8 +116,12 @@
   function patchWordExport() {
     const button = document.getElementById("downloadFormatted");
     if (button) button.textContent = "Bericht als Worddatei speichern";
-    if (window.__sgaDocxExportPatched) return;
-    downloadFormattedReport = function downloadFormattedDocxReport() {
+    if (!button) return;
+    if (window.__sgaDocxDownloadHandler) button.removeEventListener("click", window.__sgaDocxDownloadHandler);
+    if (typeof downloadFormattedReport === "function" && downloadFormattedReport !== window.__sgaDocxDownloadHandler) {
+      button.removeEventListener("click", downloadFormattedReport);
+    }
+    const handler = function downloadFormattedDocxReport() {
       const text = (els.generatedOutput.value || state.generatedText || "").trim();
       if (!text) {
         els.generateStatus.textContent = "Bitte zuerst einen Bericht generieren oder einfügen.";
@@ -128,11 +132,14 @@
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = typeof exportFileName === "function" ? exportFileName("Bericht-formatiert").replace(/\.txt$/i, ".docx") : "SGA-Bericht.docx";
+      link.download = typeof exportFileName === "function" ? exportFileName("Bericht-formatiert").replace(/\.[^.]+$/i, ".docx") : "SGA-Bericht.docx";
       link.click();
       URL.revokeObjectURL(url);
       showToast("Worddatei erstellt");
     };
+    downloadFormattedReport = handler;
+    window.__sgaDocxDownloadHandler = handler;
+    button.addEventListener("click", handler);
     window.__sgaDocxExportPatched = true;
   }
 
